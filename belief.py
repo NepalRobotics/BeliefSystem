@@ -15,7 +15,8 @@ class AvalancheTransmitter(object):
   def __init__(self, **kwargs):
     # A unique identifier for the transmitter.
     self.name = kwargs.get("name")
-    # Our current location of bearing (LOB) on the transmitter.
+    # Our current location of bearing (LOB) on the transmitter. It is asumed
+    # that zero is straight ahead, and counterclockwise is positive.
     self.lob = kwargs.get("lob")
     # Where we currently think the transmitter is, in GPS coordinates. (x, y)
     self.position = kwargs.get("position")
