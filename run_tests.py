@@ -1,4 +1,4 @@
-#!/usr/bin/python3
+#!/usr/bin/python
 
 
 import os
@@ -14,7 +14,7 @@ def run_tests():
 
   test_result = unittest.TextTestRunner(verbosity=2).run(suite)
   if not test_result.wasSuccessful():
-    print("ERROR: Unit tests failed.")
+    print "ERROR: Unit tests failed."
     return False
 
   return True
