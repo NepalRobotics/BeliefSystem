@@ -62,3 +62,23 @@ class KalmanTests(_BaseTest):
     # Our covariances should be even closer this time.
     for x in np.nditer(covariances):
       self._assert_near(0, x, 0.01)
+
+  """ Tests that adding new transmitters in the middle works. """
+  def test_transmitter_adding(self):
+    basic_filter = kalman.Kalman((1, 0), (1, 0))
+    basic_filter.add_transmitter(0, (5, 0))
+    basic_filter.set_observations((2, 0), (1, 0), 0)
+    basic_filter.update()
+
+    # Now, add another one.
+    basic_filter.add_transmitter(0, (10, 0))
+    basic_filter.set_observations((3, 0), (1, 0), 0, 0)
+    basic_filter.update()
+
+    state = basic_filter.state()
+
+    self._assert_near(3, state[0], 0.01)
+    self._assert_near(0, state[1], 0.01)
+    self._assert_near(1, state[2], 0.01)
+    self._assert_near(0, state[3], 0.01)
+    self._assert_near(0, state[4], 0.01)
