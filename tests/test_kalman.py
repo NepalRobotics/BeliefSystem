@@ -23,7 +23,8 @@ class KalmanTests(_BaseTest):
   """ Tests that the filter gives reasonable values under extremely basic
   circumstances. """
   def test_basic(self):
-    basic_filter = kalman.Kalman((1, 0), (1, 0), 0, (5, 0))
+    basic_filter = kalman.Kalman((1, 0), (1, 0))
+    basic_filter.add_transmitter(0, (5, 0))
     basic_filter.set_observations((2, 0), (1, 0), 0)
     basic_filter.update()
 
