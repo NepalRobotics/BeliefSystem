@@ -1,5 +1,4 @@
 import logging
-import math
 
 import numpy as np
 
@@ -33,7 +32,7 @@ class Kalman:
   DRONE_VELOCITY_UNCERTAINTY = 0.05
   # Our initial uncertainty on our LOBs.
   # TODO(danielp): I have zero idea of what this should be. Figure that out.
-  LOB_UNCERTAINTY = 5 * math.pi / 180
+  LOB_UNCERTAINTY = np.radians(5)
 
   """ position: Where we are. (X, Y)
   velocity: How fast we're going. (X, Y) """
@@ -172,3 +171,24 @@ class Kalman:
     self.__observation_covariances = new_observation_cov
     logger.debug("New observation covariances: %s" % \
         (self.__observation_covariances))
+
+  """ Gets the 95% confidence error ellipse for our drone position
+  measurement.
+  stddevs: How many standard deviations we want the ellipse to encompass.
+  Returns: The width, the height, and the angle to the x axis of the ellipse,
+  in a tuple in that order. """
+  def position_error_ellipse(self, stddevs):
+    # Take the subset of the covariance matrix that pertains to our position.
+    position_covariance = self.__state_covariances[:2, :2]
+
+    # Calculate its eigenvalues, and sort them.
+    eigenvalues, eigenvectors = np.linalg.eigh(position_covariance)
+    order = eigenvalues.argsort()[::-1]
+    eigenvalues = eigenvalues[order]
+    eigenvectors = eigenvectors[:, order]
+
+    # Ellipse parameters.
+    angle = np.arctan2(*eigenvectors[:, 0][::-1])
+    width, height = 2 * stddevs * np.sqrt(eigenvalues)
+
+    return (width, height, angle)

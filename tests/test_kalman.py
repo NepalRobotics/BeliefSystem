@@ -167,3 +167,21 @@ class KalmanTests(_BaseTest):
     self._assert_near(1, state[2], 0.01)
     self._assert_near(0, state[3], 0.01)
     self._assert_near(0, state[4], 0.01)
+
+  """ Tests that we can draw a reasonable position error ellipse. """
+  def test_position_error_ellipse(self):
+    basic_filter = kalman.Kalman((1, 0), (1, 0))
+    width, height, angle = basic_filter.position_error_ellipse(1)
+
+    # Because our initial covariance matrix will make the variances for x and y
+    # the same, we expect the ellipse to be a cicle.
+    self.assertEqual(width, height)
+    # Our angle should be pi/2, since all our covariances are zero.
+    self.assertEqual(np.pi / 2.0, angle)
+
+    # Now give it an observation in which y is off a lot more than x.
+    basic_filter.set_observations((2, 1), (1, 0))
+    basic_filter.update()
+    width, height, angle = basic_filter.position_error_ellipse(1)
+    # Now, the width should be larger than the height. (It's rotated.)
+    self.assertGreater(width, height)
