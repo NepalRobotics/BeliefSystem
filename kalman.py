@@ -172,7 +172,7 @@ class Kalman:
     logger.debug("New observation covariances: %s" % \
         (self.__observation_covariances))
 
-  """ Gets the 95% confidence error ellipse for our drone position
+  """ Gets a confidence error ellipse for our drone position
   measurement.
   stddevs: How many standard deviations we want the ellipse to encompass.
   Returns: The width, the height, and the angle to the x axis of the ellipse,
@@ -190,5 +190,28 @@ class Kalman:
     # Ellipse parameters.
     angle = np.arctan2(*eigenvectors[:, 0][::-1])
     width, height = 2 * stddevs * np.sqrt(eigenvalues)
+    logger.debug("Position error: width: %f, height: %f, angle: %f" % \
+        (width, height, angle))
 
     return (width, height, angle)
+
+  """ Gets confidence intervals for our LOBs.
+  stddevs: How many standard deviations we want the interval to encompass.
+  Returns: A list of the margin of errors for each LOB measurement. """
+  def lob_confidence_intervals(self, stddevs):
+    # Get the indices of the LOB covariances.
+    indices = np.diag_indices(self.__state_size)
+    # The first four are the position and velocity variances.
+    indices = (indices[0][4:], indices[1][4:])
+    if not indices[0]:
+      # We're not tracking any transmitters:
+      return []
+
+    # Get the variances.
+    variances = self.__state_covariances[indices]
+    omega = np.sqrt(variances)
+    print omega
+
+    margins_of_error = stddevs * omega
+    logger.debug("Margins of error for LOBs: %s" % (margins_of_error))
+    return margins_of_error

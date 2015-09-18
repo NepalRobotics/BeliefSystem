@@ -171,7 +171,7 @@ class KalmanTests(_BaseTest):
   """ Tests that we can draw a reasonable position error ellipse. """
   def test_position_error_ellipse(self):
     basic_filter = kalman.Kalman((1, 0), (1, 0))
-    width, height, angle = basic_filter.position_error_ellipse(1)
+    width, height, angle = basic_filter.position_error_ellipse(1.96)
 
     # Because our initial covariance matrix will make the variances for x and y
     # the same, we expect the ellipse to be a cicle.
@@ -182,6 +182,17 @@ class KalmanTests(_BaseTest):
     # Now give it an observation in which y is off a lot more than x.
     basic_filter.set_observations((2, 1), (1, 0))
     basic_filter.update()
-    width, height, angle = basic_filter.position_error_ellipse(1)
+    width, height, angle = basic_filter.position_error_ellipse(1.96)
     # Now, the width should be larger than the height. (It's rotated.)
     self.assertGreater(width, height)
+
+  """ Tests that we can compute a confidence interval for the LOB data. """
+  def test_lob_confidence(self):
+    basic_filter = kalman.Kalman((1, 0), (1, 0))
+    self.assertEqual([], basic_filter.lob_confidence_intervals(1.96))
+
+    # Now give it a transmitter to track.
+    basic_filter.add_transmitter(0, (5, 0))
+    # We should have a non-zero margin of error.
+    error = basic_filter.lob_confidence_intervals(1.96)
+    self.assertGreater(error, 0)
