@@ -88,8 +88,12 @@ class Kalman:
     for i in range(0, len(self.__transmitter_positions)):
       position = self.__transmitter_positions[i]
       # We can calculate our LOB too, based on our position.
-      new_state[i + 4] = math.atan2(position[1] - current_state[1],
-                                    position[0] - current_state[0])
+      new_state[i + 4] = np.arctan2(position[0] - current_state[0],
+                                    position[1] - current_state[1])
+      # We use the velocity vector to gauge the drone's heading, and correct the
+      # LOB accordingly.
+      heading_correction = np.arctan2(current_state[2], current_state[3])
+      new_state[i + 4] -= heading_correction
 
     logger.debug("New state prediction: %s" % (new_state))
     return new_state

@@ -63,6 +63,91 @@ class KalmanTests(_BaseTest):
     for x in np.nditer(covariances):
       self._assert_near(0, x, 0.01)
 
+  """ Tests that the model prediction still works if we rotate the whole thing
+  90 degrees. """
+  def test_going_forward(self):
+    basic_filter = kalman.Kalman((0, 1), (0, 1))
+    basic_filter.add_transmitter(0, (0, 5))
+    basic_filter.set_observations((0, 2), (0, 1), 0)
+    basic_filter.update()
+
+    state = basic_filter.state()
+
+    # We should see values that our quite close to our observation since,
+    # (surprise, surprise) our observation lines up EXACTLY with our model.
+    self._assert_near(0, state[0], 0.01)
+    self._assert_near(2, state[1], 0.01)
+    self._assert_near(0, state[2], 0.01)
+    self._assert_near(1, state[3], 0.01)
+    self._assert_near(0, state[4], 0.01)
+
+    covariances = basic_filter.state_covariances()
+
+    # Our covariances should have gotten close to zero, since our observations
+    # match our model so well.
+    for x in np.nditer(covariances):
+      self._assert_near(0, x, 0.05)
+
+    # Run another perfect iteration.
+    basic_filter.set_observations((0, 3), (0, 1), 0)
+    basic_filter.update()
+
+    state = basic_filter.state()
+
+    self._assert_near(0, state[0], 0.01)
+    self._assert_near(3, state[1], 0.01)
+    self._assert_near(0, state[2], 0.01)
+    self._assert_near(1, state[3], 0.01)
+    self._assert_near(0, state[4], 0.01)
+
+    covariances = basic_filter.state_covariances()
+
+    # Our covariances should be even closer this time.
+    for x in np.nditer(covariances):
+      self._assert_near(0, x, 0.01)
+
+  """ Tests that the model still works if we go at 45 degrees. """
+  def test_going_diagonal(self):
+    basic_filter = kalman.Kalman((0, 0), (1, 1))
+    basic_filter.add_transmitter(0, (5, 5))
+    basic_filter.set_observations((1, 1), (1, 1), 0)
+    basic_filter.update()
+
+    state = basic_filter.state()
+
+    # We should see values that our quite close to our observation since,
+    # (surprise, surprise) our observation lines up EXACTLY with our model.
+    self._assert_near(1, state[0], 0.01)
+    self._assert_near(1, state[1], 0.01)
+    self._assert_near(1, state[2], 0.01)
+    self._assert_near(1, state[3], 0.01)
+    self._assert_near(0, state[4], 0.01)
+
+    covariances = basic_filter.state_covariances()
+
+    # Our covariances should have gotten close to zero, since our observations
+    # match our model so well.
+    for x in np.nditer(covariances):
+      self._assert_near(0, x, 0.05)
+
+    # Run another perfect iteration.
+    basic_filter.set_observations((2, 2), (1, 1), 0)
+    basic_filter.update()
+
+    state = basic_filter.state()
+
+    self._assert_near(2, state[0], 0.01)
+    self._assert_near(2, state[1], 0.01)
+    self._assert_near(1, state[2], 0.01)
+    self._assert_near(1, state[3], 0.01)
+    self._assert_near(0, state[4], 0.01)
+
+    covariances = basic_filter.state_covariances()
+
+    # Our covariances should be even closer this time.
+    for x in np.nditer(covariances):
+      self._assert_near(0, x, 0.01)
+
   """ Tests that adding new transmitters in the middle works. """
   def test_transmitter_adding(self):
     basic_filter = kalman.Kalman((1, 0), (1, 0))
