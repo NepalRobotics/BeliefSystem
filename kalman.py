@@ -9,9 +9,10 @@ from pykalman import AdditiveUnscentedKalmanFilter
 logger = logging.getLogger(__name__)
 
 
-""" Adds a new row and column of zeroes to a matrix.
-Returns: A modified version of the matrix. """
 def _expand_matrix(matrix):
+  """ Adds a new row and column of zeroes to a matrix.
+  Returns:
+    A modified version of the matrix. """
   shape = matrix.shape
   new_shape = (shape[0] + 1, shape[1] + 1)
 
@@ -22,9 +23,9 @@ def _expand_matrix(matrix):
   return new_matrix
 
 
-""" Handles a Kalman filter for computing drone and transmitter locations. """
 # TODO(danielp): Look into incorporating measurements/state from other drones.
 class Kalman:
+  """ Handles a Kalman filter for computing drone and transmitter locations. """
   # Our initial uncertainty of our drone positions. GPS is not terribly
   # innacurate, so there isn't a ton of uncertainty here.
   DRONE_POSITION_UNCERTAINTY = 0.001
@@ -35,9 +36,11 @@ class Kalman:
   # TODO(danielp): I have zero idea of what this should be. Figure that out.
   LOB_UNCERTAINTY = np.radians(5)
 
-  """ position: Where we are. (X, Y)
-  velocity: How fast we're going. (X, Y) """
   def __init__(self, position, velocity):
+    """
+    Args:
+      position: Where we are. (X, Y)
+      velocity: How fast we're going. (X, Y) """
     # The transmitter x and y position should technically never change, so it's
     # not part of our state.
     self.__transmitter_positions = []
@@ -74,11 +77,14 @@ class Kalman:
         transition_functions=self.__transition_function,
         observation_functions=self.__observation_function)
 
-  """ Transition function. Tells us how to get the next state from the current
-  state.
-  current_state: The current state.
-  Returns: The next state. """
   def __transition_function(self, current_state):
+    """ Transition function. Tells us how to get the next state from the current
+    state.
+    Args:
+      current_state: The current state.
+    Returns:
+      The next state. """
+
     new_state = np.copy(current_state)
 
     # Updating the position is easy, we just add the velocity.
@@ -98,18 +104,21 @@ class Kalman:
     logger.debug("New state prediction: %s" % (new_state))
     return new_state
 
-  """ Observation function. Tells us what our sensor readings should look like
-  if our state estimate were correct and our sensors were perfect. """
   def __observation_function(self, current_state):
+    """ Observation function. Tells us what our sensor readings should look like
+    if our state estimate were correct and our sensors were perfect.
+    Returns:
+      The sensor readings we would expect. """
     # We basically measure our state directly, so this isn't all that
     # interesting.
     return current_state
 
-  """ Sets what our observations are.
-  position: Where the GPS thinks we are. (X, Y)
-  velocity: How fast we think we're going. (X, Y)
-  Additional arguments are the LOBs on any transmitters we are tracking. """
   def set_observations(self, position, velocity, *args):
+    """ Sets what our observations are.
+    Args:
+      position: Where the GPS thinks we are. (X, Y)
+      velocity: How fast we think we're going. (X, Y)
+      Additional arguments are the LOBs on any transmitters we are tracking. """
     observations = [position[0], position[1], velocity[0], velocity[1]]
 
     expecting_lobs = self.__observations.shape[0] - len(observations)
@@ -121,8 +130,8 @@ class Kalman:
     self.__observations = np.array(observations)
     logger.debug("Setting new observations: %s" % (self.__observations))
 
-  """ Updates the filter for one iteration. """
   def update(self):
+    """ Updates the filter for one iteration. """
     logger.info("Updating kalman filter.")
     output = self.__kalman.filter_update(self.__state, self.__state_covariances,
                                          observation=self.__observations,
@@ -132,18 +141,21 @@ class Kalman:
     logger.debug("New state: %s, New state covariance: %s" % \
                  (self.__state, self.__state_covariances))
 
-  """ Returns: The current state. """
   def state(self):
+    """
+    Returns:
+      The current state. """
     return self.__state
 
-  """ Returns: The current state covariances. """
   def state_covariances(self):
+    """ Returns: The current state covariances. """
     return self.__state_covariances
 
-  """ Adds a new transmitter for us to track.
-  lob: Our LOB to the transmitter.
-  location: Where we think that the transmitter is located. """
   def add_transmitter(self, lob, location):
+    """ Adds a new transmitter for us to track.
+    Args:
+      lob: Our LOB to the transmitter.
+      location: Where we think that the transmitter is located. """
     self.__transmitter_positions.append(location)
 
     # Add the LOB to the state.
@@ -173,12 +185,14 @@ class Kalman:
     logger.debug("New observation covariances: %s" % \
         (self.__observation_covariances))
 
-  """ Gets a confidence error ellipse for our drone position
-  measurement.
-  stddevs: How many standard deviations we want the ellipse to encompass.
-  Returns: The width, the height, and the angle to the x axis of the ellipse,
-  (radians) in a tuple in that order. """
   def position_error_ellipse(self, stddevs):
+    """ Gets a confidence error ellipse for our drone position
+    measurement.
+    Args:
+      stddevs: How many standard deviations we want the ellipse to encompass.
+    Returns:
+      The width, the height, and the angle to the x axis of the ellipse,
+      (radians) in a tuple in that order. """
     # Take the subset of the covariance matrix that pertains to our position.
     position_covariance = self.__state_covariances[:2, :2]
 
@@ -196,10 +210,12 @@ class Kalman:
 
     return (width, height, angle)
 
-  """ Gets confidence intervals for our LOBs.
-  stddevs: How many standard deviations we want the interval to encompass.
-  Returns: A list of the margin of errors for each LOB measurement. """
   def lob_confidence_intervals(self, stddevs):
+    """ Gets confidence intervals for our LOBs.
+    Args:
+      stddevs: How many standard deviations we want the interval to encompass.
+    Returns:
+      A list of the margin of errors for each LOB measurement. """
     # Get the indices of the LOB covariances.
     indices = np.diag_indices(self.__state_size)
     # The first four are the position and velocity variances.
@@ -216,14 +232,15 @@ class Kalman:
     logger.debug("Margins of error for LOBs: %s" % (margins_of_error))
     return margins_of_error
 
-  """ Calculates error ellipses for all the
-  transmitter positions. It does this by looking at the worst-case scenario for
-  both the error on the drone position and the error on the LOB.
-  Returns: A list of data for each transmitter. Each item in the list is itself
-  a list of 8 points that define the error region for that transmitter. This
-  region is roughly fan shaped, and the points are in clockwise order, starting
-  from the bottom left corner. """
   def transmitter_error_region(self, stddevs):
+    """ Calculates error ellipses for all the
+    transmitter positions. It does this by looking at the worst-case scenario for
+    both the error on the drone position and the error on the LOB.
+    Returns:
+      A list of data for each transmitter. Each item in the list is itself
+      a list of 8 points that define the error region for that transmitter. This
+      region is roughly fan shaped, and the points are in clockwise order,
+      starting from the bottom left corner. """
     # Basically, we're taking every point on the ellipse and projecting it
     # through the LOB to reach a new error region, which is sort of fan-shaped.
     # Start by finding both the error regions for our position and lobs.

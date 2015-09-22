@@ -8,21 +8,22 @@ import numpy as np
 import kalman
 
 
-""" A superclass for all test cases that defines some useful methods. """
 class _BaseTest(unittest.TestCase):
-  """ Makes sure that a paremeter is within a cetain amount of something else.
-  expected: The value we expected.
-  actual: The value we got.
-  error: The maximum acceptable deviation between expected and actual. """
+  """ A superclass for all test cases that defines some useful methods. """
   def _assert_near(self, expected, actual, error):
+    """ Makes sure that a paremeter is within a cetain amount of something else.
+    Args:
+      expected: The value we expected.
+      actual: The value we got.
+      error: The maximum acceptable deviation between expected and actual. """
     self.assertLess(abs(expected - actual), error)
 
 
-""" Tests for the Kalman class. """
 class KalmanTests(_BaseTest):
-  """ Tests that the filter gives reasonable values under extremely basic
-  circumstances. """
+  """ Tests for the Kalman class. """
   def test_basic(self):
+    """ Tests that the filter gives reasonable values under extremely basic
+    circumstances. """
     basic_filter = kalman.Kalman((1, 0), (1, 0))
     basic_filter.add_transmitter(0, (5, 0))
     basic_filter.set_observations((2, 0), (1, 0), 0)
@@ -63,9 +64,9 @@ class KalmanTests(_BaseTest):
     for x in np.nditer(covariances):
       self._assert_near(0, x, 0.01)
 
-  """ Tests that the model prediction still works if we rotate the whole thing
-  90 degrees. """
   def test_going_forward(self):
+    """ Tests that the model prediction still works if we rotate the whole thing
+    90 degrees. """
     basic_filter = kalman.Kalman((0, 1), (0, 1))
     basic_filter.add_transmitter(0, (0, 5))
     basic_filter.set_observations((0, 2), (0, 1), 0)
@@ -106,8 +107,8 @@ class KalmanTests(_BaseTest):
     for x in np.nditer(covariances):
       self._assert_near(0, x, 0.01)
 
-  """ Tests that the model still works if we go at 45 degrees. """
   def test_going_diagonal(self):
+    """ Tests that the model still works if we go at 45 degrees. """
     basic_filter = kalman.Kalman((0, 0), (1, 1))
     basic_filter.add_transmitter(0, (5, 5))
     basic_filter.set_observations((1, 1), (1, 1), 0)
@@ -148,8 +149,8 @@ class KalmanTests(_BaseTest):
     for x in np.nditer(covariances):
       self._assert_near(0, x, 0.01)
 
-  """ Tests that adding new transmitters in the middle works. """
   def test_transmitter_adding(self):
+    """ Tests that adding new transmitters in the middle works. """
     basic_filter = kalman.Kalman((1, 0), (1, 0))
     basic_filter.add_transmitter(0, (5, 0))
     basic_filter.set_observations((2, 0), (1, 0), 0)
@@ -168,8 +169,8 @@ class KalmanTests(_BaseTest):
     self._assert_near(0, state[3], 0.01)
     self._assert_near(0, state[4], 0.01)
 
-  """ Tests that we can draw a reasonable position error ellipse. """
   def test_position_error_ellipse(self):
+    """ Tests that we can draw a reasonable position error ellipse. """
     basic_filter = kalman.Kalman((1, 0), (1, 0))
     width, height, angle = basic_filter.position_error_ellipse(1.96)
 
@@ -186,8 +187,8 @@ class KalmanTests(_BaseTest):
     # Now, the width should be larger than the height. (It's rotated.)
     self.assertGreater(width, height)
 
-  """ Tests that we can compute a confidence interval for the LOB data. """
   def test_lob_confidence(self):
+    """ Tests that we can compute a confidence interval for the LOB data. """
     basic_filter = kalman.Kalman((1, 0), (1, 0))
     self.assertEqual([], basic_filter.lob_confidence_intervals(1.96))
 
@@ -197,9 +198,9 @@ class KalmanTests(_BaseTest):
     error = basic_filter.lob_confidence_intervals(1.96)
     self.assertGreater(error, 0)
 
-  """ Tests that we can compute an error region for the transmitter position.
-  """
   def test_transmitter_error_region(self):
+    """ Tests that we can compute an error region for the transmitter position.
+    """
     basic_filter = kalman.Kalman((1, 0), (1, 0))
     self.assertEqual([], basic_filter.transmitter_error_region(1.96))
 
