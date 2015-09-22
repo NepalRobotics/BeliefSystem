@@ -1,3 +1,4 @@
+from operator import add
 import logging
 
 import numpy as np
@@ -176,7 +177,7 @@ class Kalman:
   measurement.
   stddevs: How many standard deviations we want the ellipse to encompass.
   Returns: The width, the height, and the angle to the x axis of the ellipse,
-  in a tuple in that order. """
+  (radians) in a tuple in that order. """
   def position_error_ellipse(self, stddevs):
     # Take the subset of the covariance matrix that pertains to our position.
     position_covariance = self.__state_covariances[:2, :2]
@@ -210,8 +211,78 @@ class Kalman:
     # Get the variances.
     variances = self.__state_covariances[indices]
     omega = np.sqrt(variances)
-    print omega
 
     margins_of_error = stddevs * omega
     logger.debug("Margins of error for LOBs: %s" % (margins_of_error))
     return margins_of_error
+
+  """ Calculates error ellipses for all the
+  transmitter positions. It does this by looking at the worst-case scenario for
+  both the error on the drone position and the error on the LOB.
+  Returns: A list of data for each transmitter. Each item in the list is itself
+  a list of 8 points that define the error region for that transmitter. This
+  region is roughly fan shaped, and the points are in clockwise order, starting
+  from the bottom left corner. """
+  def transmitter_error_region(self, stddevs):
+    # Basically, we're taking every point on the ellipse and projecting it
+    # through the LOB to reach a new error region, which is sort of fan-shaped.
+    # Start by finding both the error regions for our position and lobs.
+    ellipse_width, ellipse_height, ellipse_angle = \
+        self.position_error_ellipse(stddevs)
+
+    # Turn the error ellipse into a set of points.
+    center = (self.__state[0], self.__state[1])
+    spread_x = ellipse_width / 2.0
+    spread_y = ellipse_height / 2.0
+    low_x = (center[0] - spread_x * np.cos(ellipse_angle),
+             center[1] - spread_x * np.sin(ellipse_angle))
+    high_x = (center[0] + spread_x * np.cos(ellipse_angle),
+              center[1] + spread_x * np.sin(ellipse_angle))
+    low_y = (center[0] - spread_y * np.sin(ellipse_angle),
+             center[1] - spread_y * np.cos(ellipse_angle))
+    high_y = (center[0] + spread_y * np.sin(ellipse_angle),
+              center[1] + spread_y * np.cos(ellipse_angle))
+
+    lob_errors = self.lob_confidence_intervals(stddevs)
+    lobs = self.__state[4:]
+    output = []
+    for i in range(0, len(lobs)):
+      lob = lobs[i]
+      lob_error = lob_errors[i]
+      transmitter_position = self.__transmitter_positions[i]
+
+      lob_low = lob - lob_error
+      lob_high = lob + lob_error
+      # Figure out what the transmitter position would be for each of these
+      # scenarios.
+      radius = np.sqrt((transmitter_position[0] - center[0]) ** 2 + \
+                       (transmitter_position[1] - center[1]) ** 2)
+      transmitter_low = (radius * np.cos(lob_low), radius * np.sin(lob_low))
+      transmitter_high = (radius * np.cos(lob_high), radius * np.sin(lob_high))
+
+      # Calculate points on the error ellipse when centered about all three of
+      # these positions.
+      recenter_vector_low = (transmitter_low[0] - center[0],
+                             transmitter_low[1] - center[1])
+      recenter_vector_mean = (transmitter_position[0] - center[0],
+                              transmitter_position[1] - center[1])
+      recenter_vector_high = (transmitter_high[0] - center[0],
+                              transmitter_high[1] - center[1])
+
+      bottom_left = map(add, low_y, recenter_vector_low)
+      left_middle = map(add, low_x, recenter_vector_low)
+      top_left = map(add, high_y, recenter_vector_low)
+      top_middle = map(add, high_y, recenter_vector_mean)
+      top_right = map(add, high_y, recenter_vector_high)
+      right_middle = map(add, high_x, recenter_vector_high)
+      bottom_right = map(add, low_y, recenter_vector_high)
+      bottom_middle = map(add, low_y, recenter_vector_mean)
+
+      # These points define our error region.
+      error_region = [bottom_left, left_middle, top_left, top_middle, top_right,
+                      right_middle, bottom_right, bottom_middle]
+      logger.debug("Error region for transmitter at %s: %s" % \
+                   (transmitter_position, error_region))
+      output.append(error_region)
+
+    return output

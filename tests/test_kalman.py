@@ -196,3 +196,39 @@ class KalmanTests(_BaseTest):
     # We should have a non-zero margin of error.
     error = basic_filter.lob_confidence_intervals(1.96)
     self.assertGreater(error, 0)
+
+  """ Tests that we can compute an error region for the transmitter position.
+  """
+  def test_transmitter_error_region(self):
+    basic_filter = kalman.Kalman((1, 0), (1, 0))
+    self.assertEqual([], basic_filter.transmitter_error_region(1.96))
+
+    basic_filter.add_transmitter(0, (5, 0))
+    error_region = basic_filter.transmitter_error_region(1.96)
+
+    # We know roughly how the points in the error region should relate to one
+    # another, so we can do some basic sanity checking on the output.
+    bottom_left, left_middle, top_left, top_middle, top_right, right_middle, \
+        bottom_right, bottom_middle = error_region[0]
+
+    self.assertGreater(bottom_left[1], left_middle[1])
+    self.assertGreater(top_left[1], left_middle[1])
+    self.assertLess(bottom_left[0], left_middle[0])
+    self.assertLess(left_middle[0], top_left[0])
+
+    self.assertGreater(top_middle[0], top_left[0])
+    self.assertLess(top_right[0], top_middle[0])
+    self._assert_near(top_middle[1], 0, 0.01)
+    self.assertGreater(top_middle[1], top_left[1])
+    self.assertGreater(top_right[1], top_middle[1])
+
+    self.assertGreater(right_middle[1], top_right[1])
+    self.assertGreater(right_middle[1], bottom_right[1])
+    self.assertLess(right_middle[0], top_right[0])
+    self.assertLess(bottom_right[0], right_middle[0])
+
+    self.assertGreater(bottom_middle[0], bottom_right[0])
+    self.assertGreater(bottom_middle[0], bottom_left[0])
+    self._assert_near(bottom_middle[1], 0, 0.01)
+    self.assertLess(bottom_middle[1], bottom_right[1])
+    self.assertLess(bottom_left[1], bottom_middle[1])
