@@ -1,8 +1,8 @@
 """ Contains a structure that will be used to represent a belief. """
 
 
-""" Contains meta-information about a belief. """
 class BeliefHeader(object):
+  """ Contains meta-information about a belief. """
   def __init__(self, **kwargs):
     # Timestamp for the belief in seconds from the epoch.
     self.timestamp = kwargs.get("timestamp")
@@ -10,8 +10,8 @@ class BeliefHeader(object):
     self.drone = kwargs.get("drone")
 
 
-""" Represents an Avalanche Transmitter that this drone is in contact with. """
 class AvalancheTransmitter(object):
+  """ Represents an Avalanche Transmitter that this drone is in contact with. """
   def __init__(self, **kwargs):
     # A unique identifier for the transmitter.
     self.name = kwargs.get("name")
@@ -22,8 +22,8 @@ class AvalancheTransmitter(object):
     self.position = kwargs.get("position")
 
 
-""" Contains the actual belief information. """
 class Belief(object):
+  """ Contains the actual belief information. """
   def __init__(self, transmitters=[], **kwargs):
     # The header for this belief.
     self.header = kwargs.get("header")
