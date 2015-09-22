@@ -36,6 +36,18 @@ class Kalman:
   # TODO(danielp): I have zero idea of what this should be. Figure that out.
   LOB_UNCERTAINTY = np.radians(5)
 
+  # The indices of various elements in the state.
+  _POS_X = 0
+  _POS_Y = 1
+  _VEL_X = 2
+  _VEL_Y = 3
+  # The index of the first LOB.
+  _LOB = 4
+
+  # Indices of x and y in coordinate tuples.
+  _X = 0
+  _Y = 1
+
   def __init__(self, position, velocity):
     """
     Args:
@@ -46,7 +58,8 @@ class Kalman:
     self.__transmitter_positions = []
 
     # We need an x and y position, an x and y velocity. (LOBs go after that.)
-    self.__state = np.array([position[0], position[1], velocity[0], velocity[1]])
+    self.__state = np.array([position[self._X], position[self._Y],
+                             velocity[self._X], velocity[self._Y]])
     logger.debug("Initial state: %s" % (self.state))
     self.__state_size = self.__state.shape[0]
     # Default observations.
@@ -88,18 +101,19 @@ class Kalman:
     new_state = np.copy(current_state)
 
     # Updating the position is easy, we just add the velocity.
-    new_state[0] += current_state[2]
-    new_state[1] += current_state[3]
+    new_state[self._POS_X] += current_state[self._VEL_X]
+    new_state[self._POS_Y] += current_state[self._VEL_Y]
 
     for i in range(0, len(self.__transmitter_positions)):
       position = self.__transmitter_positions[i]
       # We can calculate our LOB too, based on our position.
-      new_state[i + 4] = np.arctan2(position[0] - current_state[0],
-                                    position[1] - current_state[1])
+      new_state[self._LOB + i] = np.arctan2(position[self._X] - current_state[self._POS_X],
+                                    position[self._Y] - current_state[self._POS_Y])
       # We use the velocity vector to gauge the drone's heading, and correct the
       # LOB accordingly.
-      heading_correction = np.arctan2(current_state[2], current_state[3])
-      new_state[i + 4] -= heading_correction
+      heading_correction = np.arctan2(current_state[self._VEL_X],
+                                      current_state[self._VEL_Y])
+      new_state[self._LOB + i] -= heading_correction
 
     logger.debug("New state prediction: %s" % (new_state))
     return new_state
@@ -119,7 +133,8 @@ class Kalman:
       position: Where the GPS thinks we are. (X, Y)
       velocity: How fast we think we're going. (X, Y)
       Additional arguments are the LOBs on any transmitters we are tracking. """
-    observations = [position[0], position[1], velocity[0], velocity[1]]
+    observations = [position[self._X], position[self._Y], velocity[self._X],
+                    velocity[self._Y]]
 
     expecting_lobs = self.__observations.shape[0] - len(observations)
     if len(args) != expecting_lobs:
@@ -219,7 +234,7 @@ class Kalman:
     # Get the indices of the LOB covariances.
     indices = np.diag_indices(self.__state_size)
     # The first four are the position and velocity variances.
-    indices = (indices[0][4:], indices[1][4:])
+    indices = (indices[0][self._LOB:], indices[1][self._LOB:])
     if not indices[0]:
       # We're not tracking any transmitters:
       return []
@@ -248,20 +263,20 @@ class Kalman:
         self.position_error_ellipse(stddevs)
 
     # Turn the error ellipse into a set of points.
-    center = (self.__state[0], self.__state[1])
+    center = (self.__state[self._POS_X], self.__state[self._POS_Y])
     spread_x = ellipse_width / 2.0
     spread_y = ellipse_height / 2.0
-    low_x = (center[0] - spread_x * np.cos(ellipse_angle),
-             center[1] - spread_x * np.sin(ellipse_angle))
-    high_x = (center[0] + spread_x * np.cos(ellipse_angle),
-              center[1] + spread_x * np.sin(ellipse_angle))
-    low_y = (center[0] - spread_y * np.sin(ellipse_angle),
-             center[1] - spread_y * np.cos(ellipse_angle))
-    high_y = (center[0] + spread_y * np.sin(ellipse_angle),
-              center[1] + spread_y * np.cos(ellipse_angle))
+    low_x = (center[self._X] - spread_x * np.cos(ellipse_angle),
+             center[self._Y] - spread_x * np.sin(ellipse_angle))
+    high_x = (center[self._X] + spread_x * np.cos(ellipse_angle),
+              center[self._Y] + spread_x * np.sin(ellipse_angle))
+    low_y = (center[self._X] - spread_y * np.sin(ellipse_angle),
+             center[self._Y] - spread_y * np.cos(ellipse_angle))
+    high_y = (center[self._X] + spread_y * np.sin(ellipse_angle),
+              center[self._Y] + spread_y * np.cos(ellipse_angle))
 
     lob_errors = self.lob_confidence_intervals(stddevs)
-    lobs = self.__state[4:]
+    lobs = self.__state[self._LOB:]
     output = []
     for i in range(0, len(lobs)):
       lob = lobs[i]
@@ -272,19 +287,19 @@ class Kalman:
       lob_high = lob + lob_error
       # Figure out what the transmitter position would be for each of these
       # scenarios.
-      radius = np.sqrt((transmitter_position[0] - center[0]) ** 2 + \
-                       (transmitter_position[1] - center[1]) ** 2)
+      radius = np.sqrt((transmitter_position[self._X] - center[self._X]) ** 2 + \
+                       (transmitter_position[self._Y] - center[self._Y]) ** 2)
       transmitter_low = (radius * np.cos(lob_low), radius * np.sin(lob_low))
       transmitter_high = (radius * np.cos(lob_high), radius * np.sin(lob_high))
 
       # Calculate points on the error ellipse when centered about all three of
       # these positions.
-      recenter_vector_low = (transmitter_low[0] - center[0],
-                             transmitter_low[1] - center[1])
-      recenter_vector_mean = (transmitter_position[0] - center[0],
-                              transmitter_position[1] - center[1])
-      recenter_vector_high = (transmitter_high[0] - center[0],
-                              transmitter_high[1] - center[1])
+      recenter_vector_low = (transmitter_low[self._X] - center[self._X],
+                             transmitter_low[self._Y] - center[self._Y])
+      recenter_vector_mean = (transmitter_position[self._X] - center[self._X],
+                              transmitter_position[self._Y] - center[self._Y])
+      recenter_vector_high = (transmitter_high[self._X] - center[self._X],
+                              transmitter_high[self._Y] - center[self._Y])
 
       bottom_left = map(add, low_y, recenter_vector_low)
       left_middle = map(add, low_x, recenter_vector_low)

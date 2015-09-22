@@ -9,6 +9,18 @@ import kalman
 
 
 class _BaseTest(unittest.TestCase):
+  # Constants the indexes of different things in the state.
+  _POS_X = 0
+  _POS_Y = 1
+  _VEL_X = 2
+  _VEL_Y = 3
+  # Index of the first LOB.
+  _LOB = 4
+
+  # Constants for the indices of the x and y components in a coordinate tuple.
+  _X = 0
+  _Y = 1
+
   """ A superclass for all test cases that defines some useful methods. """
   def _assert_near(self, expected, actual, error):
     """ Makes sure that a paremeter is within a cetain amount of something else.
@@ -33,11 +45,11 @@ class KalmanTests(_BaseTest):
 
     # We should see values that our quite close to our observation since,
     # (surprise, surprise) our observation lines up EXACTLY with our model.
-    self._assert_near(2, state[0], 0.01)
-    self._assert_near(0, state[1], 0.01)
-    self._assert_near(1, state[2], 0.01)
-    self._assert_near(0, state[3], 0.01)
-    self._assert_near(0, state[4], 0.01)
+    self._assert_near(2, state[self._POS_X], 0.01)
+    self._assert_near(0, state[self._POS_Y], 0.01)
+    self._assert_near(1, state[self._VEL_X], 0.01)
+    self._assert_near(0, state[self._VEL_Y], 0.01)
+    self._assert_near(0, state[self._LOB], 0.01)
 
     covariances = basic_filter.state_covariances()
 
@@ -52,11 +64,11 @@ class KalmanTests(_BaseTest):
 
     state = basic_filter.state()
 
-    self._assert_near(3, state[0], 0.01)
-    self._assert_near(0, state[1], 0.01)
-    self._assert_near(1, state[2], 0.01)
-    self._assert_near(0, state[3], 0.01)
-    self._assert_near(0, state[4], 0.01)
+    self._assert_near(3, state[self._POS_X], 0.01)
+    self._assert_near(0, state[self._POS_Y], 0.01)
+    self._assert_near(1, state[self._VEL_X], 0.01)
+    self._assert_near(0, state[self._VEL_Y], 0.01)
+    self._assert_near(0, state[self._LOB], 0.01)
 
     covariances = basic_filter.state_covariances()
 
@@ -76,11 +88,11 @@ class KalmanTests(_BaseTest):
 
     # We should see values that our quite close to our observation since,
     # (surprise, surprise) our observation lines up EXACTLY with our model.
-    self._assert_near(0, state[0], 0.01)
-    self._assert_near(2, state[1], 0.01)
-    self._assert_near(0, state[2], 0.01)
-    self._assert_near(1, state[3], 0.01)
-    self._assert_near(0, state[4], 0.01)
+    self._assert_near(0, state[self._POS_X], 0.01)
+    self._assert_near(2, state[self._POS_Y], 0.01)
+    self._assert_near(0, state[self._VEL_X], 0.01)
+    self._assert_near(1, state[self._VEL_Y], 0.01)
+    self._assert_near(0, state[self._LOB], 0.01)
 
     covariances = basic_filter.state_covariances()
 
@@ -95,11 +107,11 @@ class KalmanTests(_BaseTest):
 
     state = basic_filter.state()
 
-    self._assert_near(0, state[0], 0.01)
-    self._assert_near(3, state[1], 0.01)
-    self._assert_near(0, state[2], 0.01)
-    self._assert_near(1, state[3], 0.01)
-    self._assert_near(0, state[4], 0.01)
+    self._assert_near(0, state[self._POS_X], 0.01)
+    self._assert_near(3, state[self._POS_Y], 0.01)
+    self._assert_near(0, state[self._VEL_X], 0.01)
+    self._assert_near(1, state[self._VEL_Y], 0.01)
+    self._assert_near(0, state[self._LOB], 0.01)
 
     covariances = basic_filter.state_covariances()
 
@@ -118,11 +130,11 @@ class KalmanTests(_BaseTest):
 
     # We should see values that our quite close to our observation since,
     # (surprise, surprise) our observation lines up EXACTLY with our model.
-    self._assert_near(1, state[0], 0.01)
-    self._assert_near(1, state[1], 0.01)
-    self._assert_near(1, state[2], 0.01)
-    self._assert_near(1, state[3], 0.01)
-    self._assert_near(0, state[4], 0.01)
+    self._assert_near(1, state[self._POS_X], 0.01)
+    self._assert_near(1, state[self._POS_Y], 0.01)
+    self._assert_near(1, state[self._VEL_X], 0.01)
+    self._assert_near(1, state[self._VEL_Y], 0.01)
+    self._assert_near(0, state[self._LOB], 0.01)
 
     covariances = basic_filter.state_covariances()
 
@@ -137,11 +149,11 @@ class KalmanTests(_BaseTest):
 
     state = basic_filter.state()
 
-    self._assert_near(2, state[0], 0.01)
-    self._assert_near(2, state[1], 0.01)
-    self._assert_near(1, state[2], 0.01)
-    self._assert_near(1, state[3], 0.01)
-    self._assert_near(0, state[4], 0.01)
+    self._assert_near(2, state[self._POS_X], 0.01)
+    self._assert_near(2, state[self._POS_Y], 0.01)
+    self._assert_near(1, state[self._VEL_X], 0.01)
+    self._assert_near(1, state[self._VEL_Y], 0.01)
+    self._assert_near(0, state[self._LOB], 0.01)
 
     covariances = basic_filter.state_covariances()
 
@@ -163,11 +175,11 @@ class KalmanTests(_BaseTest):
 
     state = basic_filter.state()
 
-    self._assert_near(3, state[0], 0.01)
-    self._assert_near(0, state[1], 0.01)
-    self._assert_near(1, state[2], 0.01)
-    self._assert_near(0, state[3], 0.01)
-    self._assert_near(0, state[4], 0.01)
+    self._assert_near(3, state[self._POS_X], 0.01)
+    self._assert_near(0, state[self._POS_Y], 0.01)
+    self._assert_near(1, state[self._VEL_X], 0.01)
+    self._assert_near(0, state[self._VEL_Y], 0.01)
+    self._assert_near(0, state[self._LOB], 0.01)
 
   def test_position_error_ellipse(self):
     """ Tests that we can draw a reasonable position error ellipse. """
@@ -212,24 +224,24 @@ class KalmanTests(_BaseTest):
     bottom_left, left_middle, top_left, top_middle, top_right, right_middle, \
         bottom_right, bottom_middle = error_region[0]
 
-    self.assertGreater(bottom_left[1], left_middle[1])
-    self.assertGreater(top_left[1], left_middle[1])
-    self.assertLess(bottom_left[0], left_middle[0])
-    self.assertLess(left_middle[0], top_left[0])
+    self.assertGreater(bottom_left[self._Y], left_middle[self._Y])
+    self.assertGreater(top_left[self._Y], left_middle[self._Y])
+    self.assertLess(bottom_left[self._X], left_middle[self._X])
+    self.assertLess(left_middle[self._X], top_left[self._X])
 
-    self.assertGreater(top_middle[0], top_left[0])
-    self.assertLess(top_right[0], top_middle[0])
-    self._assert_near(top_middle[1], 0, 0.01)
-    self.assertGreater(top_middle[1], top_left[1])
-    self.assertGreater(top_right[1], top_middle[1])
+    self.assertGreater(top_middle[self._X], top_left[self._X])
+    self.assertLess(top_right[self._X], top_middle[self._X])
+    self._assert_near(top_middle[self._Y], 0, 0.01)
+    self.assertGreater(top_middle[self._Y], top_left[self._Y])
+    self.assertGreater(top_right[self._Y], top_middle[self._Y])
 
-    self.assertGreater(right_middle[1], top_right[1])
-    self.assertGreater(right_middle[1], bottom_right[1])
-    self.assertLess(right_middle[0], top_right[0])
-    self.assertLess(bottom_right[0], right_middle[0])
+    self.assertGreater(right_middle[self._Y], top_right[self._Y])
+    self.assertGreater(right_middle[self._Y], bottom_right[self._Y])
+    self.assertLess(right_middle[self._X], top_right[self._X])
+    self.assertLess(bottom_right[self._X], right_middle[self._X])
 
-    self.assertGreater(bottom_middle[0], bottom_right[0])
-    self.assertGreater(bottom_middle[0], bottom_left[0])
-    self._assert_near(bottom_middle[1], 0, 0.01)
-    self.assertLess(bottom_middle[1], bottom_right[1])
-    self.assertLess(bottom_left[1], bottom_middle[1])
+    self.assertGreater(bottom_middle[self._X], bottom_right[self._X])
+    self.assertGreater(bottom_middle[self._X], bottom_left[self._X])
+    self._assert_near(bottom_middle[self._Y], 0, 0.01)
+    self.assertLess(bottom_middle[self._Y], bottom_right[self._Y])
+    self.assertLess(bottom_left[self._Y], bottom_middle[self._Y])
