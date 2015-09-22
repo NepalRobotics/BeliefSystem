@@ -1,0 +1,4 @@
+[submodule "IPC"]
+	path = IPC
+	url = git@github.com:NepalRobotics/IPC.git
+	branch = feature/SocketClientClasses
