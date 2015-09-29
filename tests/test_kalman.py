@@ -1,14 +1,14 @@
 """ Tests for the Kalman filter. """
 
 
-import unittest
-
 import numpy as np
 
 import kalman
+import tests
 
 
-class _BaseTest(unittest.TestCase):
+class _BaseTest(tests.BaseTest):
+  """ Defines common members for all the test cases in this file. """
   # Constants the indexes of different things in the state.
   _POS_X = 0
   _POS_Y = 1
@@ -20,15 +20,6 @@ class _BaseTest(unittest.TestCase):
   # Constants for the indices of the x and y components in a coordinate tuple.
   _X = 0
   _Y = 1
-
-  """ A superclass for all test cases that defines some useful methods. """
-  def _assert_near(self, expected, actual, error):
-    """ Makes sure that a paremeter is within a cetain amount of something else.
-    Args:
-      expected: The value we expected.
-      actual: The value we got.
-      error: The maximum acceptable deviation between expected and actual. """
-    self.assertLess(abs(expected - actual), error)
 
 
 class KalmanTests(_BaseTest):
