@@ -25,7 +25,11 @@ def _expand_matrix(matrix):
 
 # TODO(danielp): Look into incorporating measurements/state from other drones.
 class Kalman:
-  """ Handles a Kalman filter for computing drone and transmitter locations. """
+  """ Handles a Kalman filter for computing drone and transmitter locations.
+  NOTE: LOB readings come in from the radio as angles relative from the
+  nose of the plane, where zero is straight forward. Before they are added to
+  the filter, they should be transformed according to the velocity, so
+  everything in the state is computed with the positive x axis as zero. """
   # Our initial uncertainty of our drone positions. GPS is not terribly
   # innacurate, so there isn't a ton of uncertainty here.
   DRONE_POSITION_UNCERTAINTY = 0.001
@@ -37,12 +41,12 @@ class Kalman:
   LOB_UNCERTAINTY = np.radians(5)
 
   # The indices of various elements in the state.
-  _POS_X = 0
-  _POS_Y = 1
-  _VEL_X = 2
-  _VEL_Y = 3
+  POS_X = 0
+  POS_Y = 1
+  VEL_X = 2
+  VEL_Y = 3
   # The index of the first LOB.
-  _LOB = 4
+  LOB = 4
 
   # Indices of x and y in coordinate tuples.
   _X = 0
@@ -101,19 +105,16 @@ class Kalman:
     new_state = np.copy(current_state)
 
     # Updating the position is easy, we just add the velocity.
-    new_state[self._POS_X] += current_state[self._VEL_X]
-    new_state[self._POS_Y] += current_state[self._VEL_Y]
+    new_state[self.POS_X] += current_state[self.VEL_X]
+    new_state[self.POS_Y] += current_state[self.VEL_Y]
 
     for i in range(0, len(self.__transmitter_positions)):
       position = self.__transmitter_positions[i]
       # We can calculate our LOB too, based on our position.
-      new_state[self._LOB + i] = np.arctan2(position[self._X] - current_state[self._POS_X],
-                                    position[self._Y] - current_state[self._POS_Y])
-      # We use the velocity vector to gauge the drone's heading, and correct the
-      # LOB accordingly.
-      heading_correction = np.arctan2(current_state[self._VEL_X],
-                                      current_state[self._VEL_Y])
-      new_state[self._LOB + i] -= heading_correction
+      new_state[self.LOB + i] = np.arctan2(position[self._Y] - \
+                                            current_state[self.POS_Y],
+                                            position[self._X] - \
+                                            current_state[self.POS_X])
 
     logger.debug("New state prediction: %s" % (new_state))
     return new_state
@@ -132,7 +133,8 @@ class Kalman:
     Args:
       position: Where the GPS thinks we are. (X, Y)
       velocity: How fast we think we're going. (X, Y)
-      Additional arguments are the LOBs on any transmitters we are tracking. """
+      Additional arguments are the LOBs on any transmitters we are tracking.
+      Any of the arguments being None means we're missing a measurement. """
     observations = [position[self._X], position[self._Y], velocity[self._X],
                     velocity[self._Y]]
 
@@ -162,6 +164,12 @@ class Kalman:
       The current state. """
     return self.__state
 
+  def position(self):
+    """
+    Returns:
+      The position from the current state, in form (X, Y). """
+    return (self.__state[self.POS_X], self.__state[self.POS_Y])
+
   def state_covariances(self):
     """ Returns: The current state covariances. """
     return self.__state_covariances
@@ -169,7 +177,8 @@ class Kalman:
   def add_transmitter(self, lob, location):
     """ Adds a new transmitter for us to track.
     Args:
-      lob: Our LOB to the transmitter.
+      lob: Our LOB to the transmitter. Note that this value should be normalized
+      with normalize_lobs() before being added.
       location: Where we think that the transmitter is located. """
     self.__transmitter_positions.append(location)
 
@@ -199,6 +208,14 @@ class Kalman:
     self.__observation_covariances = new_observation_cov
     logger.debug("New observation covariances: %s" % \
         (self.__observation_covariances))
+
+  def set_transmitter_positions(self, positions):
+    """ Sets new calculated positions for the transmitters.
+    Args:
+      positions: A dict of positions. The keys are the indices of transmitters
+      in the state. """
+    for index, position in positions.iteritems():
+      self.__transmitter_positions[i - self.LOB] = position
 
   def position_error_ellipse(self, stddevs):
     """ Gets a confidence error ellipse for our drone position
@@ -234,7 +251,7 @@ class Kalman:
     # Get the indices of the LOB covariances.
     indices = np.diag_indices(self.__state_size)
     # The first four are the position and velocity variances.
-    indices = (indices[0][self._LOB:], indices[1][self._LOB:])
+    indices = (indices[0][self.LOB:], indices[1][self.LOB:])
     if not indices[0]:
       # We're not tracking any transmitters:
       return []
@@ -247,74 +264,20 @@ class Kalman:
     logger.debug("Margins of error for LOBs: %s" % (margins_of_error))
     return margins_of_error
 
-  def transmitter_error_region(self, stddevs):
-    """ Calculates error ellipses for all the
-    transmitter positions. It does this by looking at the worst-case scenario for
-    both the error on the drone position and the error on the LOB.
+  def normalize_lobs(self, lobs):
+    """ Takes a set of LOBs and transforms them according to the direction the
+    plane is currently pointing, such that angle zero is the positive x axis,
+    like in the unit circle.
+    Args:
+      lobs: Either a single bearing, or a Numpy array of bearings.
     Returns:
-      A list of data for each transmitter. Each item in the list is itself
-      a list of 8 points that define the error region for that transmitter. This
-      region is roughly fan shaped, and the points are in clockwise order,
-      starting from the bottom left corner. """
-    # Basically, we're taking every point on the ellipse and projecting it
-    # through the LOB to reach a new error region, which is sort of fan-shaped.
-    # Start by finding both the error regions for our position and lobs.
-    ellipse_width, ellipse_height, ellipse_angle = \
-        self.position_error_ellipse(stddevs)
+      A numpy array of transformed bearings, or a single one, depending on the
+      input. """
+    heading_correction = np.arctan2(self.__state[self.VEL_Y],
+                                    self.__state[self.VEL_X])
+    return lobs + heading_correction
 
-    # Turn the error ellipse into a set of points.
-    center = (self.__state[self._POS_X], self.__state[self._POS_Y])
-    spread_x = ellipse_width / 2.0
-    spread_y = ellipse_height / 2.0
-    low_x = (center[self._X] - spread_x * np.cos(ellipse_angle),
-             center[self._Y] - spread_x * np.sin(ellipse_angle))
-    high_x = (center[self._X] + spread_x * np.cos(ellipse_angle),
-              center[self._Y] + spread_x * np.sin(ellipse_angle))
-    low_y = (center[self._X] - spread_y * np.sin(ellipse_angle),
-             center[self._Y] - spread_y * np.cos(ellipse_angle))
-    high_y = (center[self._X] + spread_y * np.sin(ellipse_angle),
-              center[self._Y] + spread_y * np.cos(ellipse_angle))
-
-    lob_errors = self.lob_confidence_intervals(stddevs)
-    lobs = self.__state[self._LOB:]
-    output = []
-    for i in range(0, len(lobs)):
-      lob = lobs[i]
-      lob_error = lob_errors[i]
-      transmitter_position = self.__transmitter_positions[i]
-
-      lob_low = lob - lob_error
-      lob_high = lob + lob_error
-      # Figure out what the transmitter position would be for each of these
-      # scenarios.
-      radius = np.sqrt((transmitter_position[self._X] - center[self._X]) ** 2 + \
-                       (transmitter_position[self._Y] - center[self._Y]) ** 2)
-      transmitter_low = (radius * np.cos(lob_low), radius * np.sin(lob_low))
-      transmitter_high = (radius * np.cos(lob_high), radius * np.sin(lob_high))
-
-      # Calculate points on the error ellipse when centered about all three of
-      # these positions.
-      recenter_vector_low = (transmitter_low[self._X] - center[self._X],
-                             transmitter_low[self._Y] - center[self._Y])
-      recenter_vector_mean = (transmitter_position[self._X] - center[self._X],
-                              transmitter_position[self._Y] - center[self._Y])
-      recenter_vector_high = (transmitter_high[self._X] - center[self._X],
-                              transmitter_high[self._Y] - center[self._Y])
-
-      bottom_left = map(add, low_y, recenter_vector_low)
-      left_middle = map(add, low_x, recenter_vector_low)
-      top_left = map(add, high_y, recenter_vector_low)
-      top_middle = map(add, high_y, recenter_vector_mean)
-      top_right = map(add, high_y, recenter_vector_high)
-      right_middle = map(add, high_x, recenter_vector_high)
-      bottom_right = map(add, low_y, recenter_vector_high)
-      bottom_middle = map(add, low_y, recenter_vector_mean)
-
-      # These points define our error region.
-      error_region = [bottom_left, left_middle, top_left, top_middle, top_right,
-                      right_middle, bottom_right, bottom_middle]
-      logger.debug("Error region for transmitter at %s: %s" % \
-                   (transmitter_position, error_region))
-      output.append(error_region)
-
-    return output
+  def number_of_transmitters(self):
+    """ Returns:
+      The number of transmitters we are currently tracking. """
+    return len(self.__transmitter_positions)

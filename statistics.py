@@ -8,7 +8,7 @@ import numpy as np
 center point.
 Args:
   covariance: The covariance matrix to use.
-  center: The center point of the ellipse. (Should be a numpy tuple.)
+  center: The center point of the ellipse. (Should be a numpy array.)
   z_score: How many standard deviations we want the ellipse to encompass.
   points: This function is designed to approximate the ellipse by calculating a
   number of intermediate points on the ellipse. This argument specifies how many
