@@ -28,8 +28,9 @@ class KalmanTests(_BaseTest):
     """ Tests that the filter gives reasonable values under extremely basic
     circumstances. """
     basic_filter = kalman.Kalman((1, 0), (1, 0))
-    basic_filter.add_transmitter(0, (5, 0))
-    basic_filter.set_observations((2, 0), (1, 0), 0)
+    basic_filter.add_transmitter(basic_filter.normalize_lobs(0), (5, 0))
+    basic_filter.set_observations((2, 0), (1, 0),
+        basic_filter.normalize_lobs(0))
     basic_filter.update()
 
     state = basic_filter.state()
@@ -40,7 +41,7 @@ class KalmanTests(_BaseTest):
     self._assert_near(0, state[self._POS_Y], 0.01)
     self._assert_near(1, state[self._VEL_X], 0.01)
     self._assert_near(0, state[self._VEL_Y], 0.01)
-    self._assert_near(0, state[self._LOB], 0.01)
+    self._assert_near(basic_filter.normalize_lobs(0), state[self._LOB], 0.01)
 
     covariances = basic_filter.state_covariances()
 
@@ -50,7 +51,8 @@ class KalmanTests(_BaseTest):
       self._assert_near(0, x, 0.05)
 
     # Run another perfect iteration.
-    basic_filter.set_observations((3, 0), (1, 0), 0)
+    basic_filter.set_observations((3, 0), (1, 0),
+        basic_filter.normalize_lobs(0))
     basic_filter.update()
 
     state = basic_filter.state()
@@ -59,7 +61,7 @@ class KalmanTests(_BaseTest):
     self._assert_near(0, state[self._POS_Y], 0.01)
     self._assert_near(1, state[self._VEL_X], 0.01)
     self._assert_near(0, state[self._VEL_Y], 0.01)
-    self._assert_near(0, state[self._LOB], 0.01)
+    self._assert_near(basic_filter.normalize_lobs(0), state[self._LOB], 0.01)
 
     covariances = basic_filter.state_covariances()
 
@@ -71,8 +73,9 @@ class KalmanTests(_BaseTest):
     """ Tests that the model prediction still works if we rotate the whole thing
     90 degrees. """
     basic_filter = kalman.Kalman((0, 1), (0, 1))
-    basic_filter.add_transmitter(0, (0, 5))
-    basic_filter.set_observations((0, 2), (0, 1), 0)
+    basic_filter.add_transmitter(basic_filter.normalize_lobs(0), (0, 5))
+    basic_filter.set_observations((0, 2), (0, 1),
+        basic_filter.normalize_lobs(0))
     basic_filter.update()
 
     state = basic_filter.state()
@@ -83,7 +86,7 @@ class KalmanTests(_BaseTest):
     self._assert_near(2, state[self._POS_Y], 0.01)
     self._assert_near(0, state[self._VEL_X], 0.01)
     self._assert_near(1, state[self._VEL_Y], 0.01)
-    self._assert_near(0, state[self._LOB], 0.01)
+    self._assert_near(basic_filter.normalize_lobs(0), state[self._LOB], 0.01)
 
     covariances = basic_filter.state_covariances()
 
@@ -93,7 +96,8 @@ class KalmanTests(_BaseTest):
       self._assert_near(0, x, 0.05)
 
     # Run another perfect iteration.
-    basic_filter.set_observations((0, 3), (0, 1), 0)
+    basic_filter.set_observations((0, 3), (0, 1),
+        basic_filter.normalize_lobs(0))
     basic_filter.update()
 
     state = basic_filter.state()
@@ -102,7 +106,7 @@ class KalmanTests(_BaseTest):
     self._assert_near(3, state[self._POS_Y], 0.01)
     self._assert_near(0, state[self._VEL_X], 0.01)
     self._assert_near(1, state[self._VEL_Y], 0.01)
-    self._assert_near(0, state[self._LOB], 0.01)
+    self._assert_near(basic_filter.normalize_lobs(0), state[self._LOB], 0.01)
 
     covariances = basic_filter.state_covariances()
 
@@ -113,8 +117,9 @@ class KalmanTests(_BaseTest):
   def test_going_diagonal(self):
     """ Tests that the model still works if we go at 45 degrees. """
     basic_filter = kalman.Kalman((0, 0), (1, 1))
-    basic_filter.add_transmitter(0, (5, 5))
-    basic_filter.set_observations((1, 1), (1, 1), 0)
+    basic_filter.add_transmitter(basic_filter.normalize_lobs(0), (5, 5))
+    basic_filter.set_observations((1, 1), (1, 1),
+        basic_filter.normalize_lobs(0))
     basic_filter.update()
 
     state = basic_filter.state()
@@ -125,7 +130,7 @@ class KalmanTests(_BaseTest):
     self._assert_near(1, state[self._POS_Y], 0.01)
     self._assert_near(1, state[self._VEL_X], 0.01)
     self._assert_near(1, state[self._VEL_Y], 0.01)
-    self._assert_near(0, state[self._LOB], 0.01)
+    self._assert_near(basic_filter.normalize_lobs(0), state[self._LOB], 0.01)
 
     covariances = basic_filter.state_covariances()
 
@@ -135,7 +140,8 @@ class KalmanTests(_BaseTest):
       self._assert_near(0, x, 0.05)
 
     # Run another perfect iteration.
-    basic_filter.set_observations((2, 2), (1, 1), 0)
+    basic_filter.set_observations((2, 2), (1, 1),
+        basic_filter.normalize_lobs(0))
     basic_filter.update()
 
     state = basic_filter.state()
@@ -144,7 +150,7 @@ class KalmanTests(_BaseTest):
     self._assert_near(2, state[self._POS_Y], 0.01)
     self._assert_near(1, state[self._VEL_X], 0.01)
     self._assert_near(1, state[self._VEL_Y], 0.01)
-    self._assert_near(0, state[self._LOB], 0.01)
+    self._assert_near(basic_filter.normalize_lobs(0), state[self._LOB], 0.01)
 
     covariances = basic_filter.state_covariances()
 
@@ -155,13 +161,15 @@ class KalmanTests(_BaseTest):
   def test_transmitter_adding(self):
     """ Tests that adding new transmitters in the middle works. """
     basic_filter = kalman.Kalman((1, 0), (1, 0))
-    basic_filter.add_transmitter(0, (5, 0))
-    basic_filter.set_observations((2, 0), (1, 0), 0)
+    basic_filter.add_transmitter(basic_filter.normalize_lobs(0), (5, 0))
+    basic_filter.set_observations((2, 0), (1, 0),
+        basic_filter.normalize_lobs(0))
     basic_filter.update()
 
     # Now, add another one.
-    basic_filter.add_transmitter(0, (10, 0))
-    basic_filter.set_observations((3, 0), (1, 0), 0, 0)
+    basic_filter.add_transmitter(basic_filter.normalize_lobs(0), (10, 0))
+    bearing = basic_filter.normalize_lobs(0)
+    basic_filter.set_observations((3, 0), (1, 0), bearing, bearing)
     basic_filter.update()
 
     state = basic_filter.state()
@@ -170,7 +178,7 @@ class KalmanTests(_BaseTest):
     self._assert_near(0, state[self._POS_Y], 0.01)
     self._assert_near(1, state[self._VEL_X], 0.01)
     self._assert_near(0, state[self._VEL_Y], 0.01)
-    self._assert_near(0, state[self._LOB], 0.01)
+    self._assert_near(basic_filter.normalize_lobs(0), state[self._LOB], 0.01)
 
   def test_position_error_ellipse(self):
     """ Tests that we can draw a reasonable position error ellipse. """
@@ -196,43 +204,7 @@ class KalmanTests(_BaseTest):
     self.assertEqual([], basic_filter.lob_confidence_intervals(1.96))
 
     # Now give it a transmitter to track.
-    basic_filter.add_transmitter(0, (5, 0))
+    basic_filter.add_transmitter(basic_filter.normalize_lobs(0), (5, 0))
     # We should have a non-zero margin of error.
     error = basic_filter.lob_confidence_intervals(1.96)
     self.assertGreater(error, 0)
-
-  def test_transmitter_error_region(self):
-    """ Tests that we can compute an error region for the transmitter position.
-    """
-    basic_filter = kalman.Kalman((1, 0), (1, 0))
-    self.assertEqual([], basic_filter.transmitter_error_region(1.96))
-
-    basic_filter.add_transmitter(0, (5, 0))
-    error_region = basic_filter.transmitter_error_region(1.96)
-
-    # We know roughly how the points in the error region should relate to one
-    # another, so we can do some basic sanity checking on the output.
-    bottom_left, left_middle, top_left, top_middle, top_right, right_middle, \
-        bottom_right, bottom_middle = error_region[0]
-
-    self.assertGreater(bottom_left[self._Y], left_middle[self._Y])
-    self.assertGreater(top_left[self._Y], left_middle[self._Y])
-    self.assertLess(bottom_left[self._X], left_middle[self._X])
-    self.assertLess(left_middle[self._X], top_left[self._X])
-
-    self.assertGreater(top_middle[self._X], top_left[self._X])
-    self.assertLess(top_right[self._X], top_middle[self._X])
-    self._assert_near(top_middle[self._Y], 0, 0.01)
-    self.assertGreater(top_middle[self._Y], top_left[self._Y])
-    self.assertGreater(top_right[self._Y], top_middle[self._Y])
-
-    self.assertGreater(right_middle[self._Y], top_right[self._Y])
-    self.assertGreater(right_middle[self._Y], bottom_right[self._Y])
-    self.assertLess(right_middle[self._X], top_right[self._X])
-    self.assertLess(bottom_right[self._X], right_middle[self._X])
-
-    self.assertGreater(bottom_middle[self._X], bottom_right[self._X])
-    self.assertGreater(bottom_middle[self._X], bottom_left[self._X])
-    self._assert_near(bottom_middle[self._Y], 0, 0.01)
-    self.assertLess(bottom_middle[self._Y], bottom_right[self._Y])
-    self.assertLess(bottom_left[self._Y], bottom_middle[self._Y])
