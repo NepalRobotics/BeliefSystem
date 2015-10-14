@@ -31,3 +31,20 @@ class ErrorEllipseTests(tests.BaseTest):
       result = np.sum(terms)
 
       self._assert_near(1, result, 0.001)
+
+  def test_centered(self):
+    """ Tests that it can compute the ellipse when it is not centered at the
+    origin. """
+    test_covariance = np.array([[1, 0], [0, 2]])
+    test_center = (2, 2)
+    test_z = 1.96
+    test_points = 1000
+
+    points = statistics.error_ellipse(test_covariance, test_center, test_z,
+                                      test_points)
+
+    x_max_radius = test_z * test_covariance[0][0]
+    y_max_radius = test_z * test_covariance[1][1]
+    for point in points:
+      self.assertLessEqual(abs(point[0] - test_center[0]), x_max_radius)
+      self.assertLessEqual(abs(point[1] - test_center[1]), y_max_radius)

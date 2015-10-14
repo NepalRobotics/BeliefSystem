@@ -1,6 +1,8 @@
 """ Useful statistical functions. """
 
 
+from operator import add
+
 import numpy as np
 
 
@@ -19,10 +21,8 @@ def error_ellipse(covariance, center, z_score, points):
   # Calculate eigenvalues and eigenvectors, which define the ellipse.
   eigenvalues, eigenvectors = np.linalg.eigh(covariance)
 
-  # Find the maximum and minimum values in each dimension.
+  # Find the semi-axes in each direction.
   radii = z_score * np.sqrt(eigenvalues)
-  maxima = center + radii
-  minima = center - radii
 
   # Choose random points on the ellipse.
   selected_points = []
@@ -52,6 +52,9 @@ def error_ellipse(covariance, center, z_score, points):
     # Optionally, use the negative solution.
     if np.random.randint(0, 2):
       point[last_dimension] = -point[last_dimension]
+
+    # Shift so it's centered where we want it.
+    point = map(add, point, center)
 
     selected_points.append(point)
 
