@@ -20,8 +20,18 @@ Returns:
 def error_ellipse(covariance, center, z_score, points):
   # Calculate eigenvalues and eigenvectors, which define the ellipse.
   eigenvalues, eigenvectors = np.linalg.eigh(covariance)
+  # Sometimes due to floating-point innacuracies, or eigenvalues get slightly
+  # negative. If this happens, bump them back to a bit above zero. (They can't
+  # be zero exactly, because they end up in the denominator.)
+  for value in np.nditer(eigenvalues, op_flags=["readwrite"]):
+    if value < 0:
+      if 0 - value < 0.001:
+        value[...] = value * -1
+      else:
+        raise ValueError("Negative eigenvalue of covariance matrix!")
 
   # Find the semi-axes in each direction.
+  print "Eigvals: %s" % (eigenvalues)
   radii = z_score * np.sqrt(eigenvalues)
 
   # Choose random points on the ellipse.

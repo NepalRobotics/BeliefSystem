@@ -22,6 +22,21 @@ def _expand_matrix(matrix):
 
   return new_matrix
 
+def _positivise_covariance(matrix):
+  """ Nudges values in a matrix to keep it from becoming non-positive definite
+  due to floating point innacuracies. Note that it will fail loudly if it finds
+  itself needing to make anything more than minor changes.
+  These changes are sourced from here:
+  http://robotics.stackexchange.com/questions/2000/maintaining-positive-
+      definite-property-for-covariance-in-an-unscented-kalman-fil
+  Returns:
+    A new, modified matrix.
+  """
+  # "Even out" off-diagonal terms.
+  new = 0.5 * matrix + 0.5 * matrix.transpose()
+  # Prevent underflow errors.
+  new = new + 0.001 * np.identity(new.shape[0])
+  return new
 
 # TODO(danielp): Look into incorporating measurements/state from other drones.
 class Kalman:
@@ -39,6 +54,12 @@ class Kalman:
   # Our initial uncertainty on our LOBs.
   # TODO(danielp): I have zero idea of what this should be. Figure that out.
   LOB_UNCERTAINTY = np.radians(5)
+  # How good our model is of the drone position.
+  POSITION_MODEL_UNCERTAINTY = 0.001
+  # How good our model is of the drone velocity.
+  VELOCITY_MODEL_UNCERTAINTY = 0.05
+  # How good our model is of the LOBs.
+  LOB_MODEL_UNCERTAINTY = 0.1
 
   # The indices of various elements in the state.
   POS_X = 0
@@ -88,6 +109,18 @@ class Kalman:
     # our initial state covariances are.
     self.__observation_covariances = np.copy(self.__state_covariances)
 
+    # Set the transition covariance, which is what pykalman calls the Q matrix.
+    # In this case, we want the covariances of the position and velocity to be
+    # rather small, but those of the LOBs to be larger.
+    self.__transition_covariances = np.zeros((self.__state_size,
+                                              self.__state_size))
+    diagonal_fill = [self.POSITION_MODEL_UNCERTAINTY,
+                     self.POSITION_MODEL_UNCERTAINTY,
+                     self.VELOCITY_MODEL_UNCERTAINTY,
+                     self.VELOCITY_MODEL_UNCERTAINTY]
+    diagonal_indices = np.diag_indices(self.__state_size)
+    self.__transition_covariances[diagonal_indices] = diagonal_fill
+
     # Initialize the Kalman filter.
     self.__kalman = \
     AdditiveUnscentedKalmanFilter( \
@@ -110,14 +143,25 @@ class Kalman:
 
     for i in range(0, len(self.__transmitter_positions)):
       position = self.__transmitter_positions[i]
+      print "Using position: %s" % (str(position))
       # We can calculate our LOB too, based on our position.
-      new_state[self.LOB + i] = np.arctan2(position[self._Y] - \
-                                            current_state[self.POS_Y],
-                                            position[self._X] - \
-                                            current_state[self.POS_X])
+      new_state[self.LOB + i] = self.__estimate_lob(current_state,
+                                                    self.LOB + i)
+    print "Expecting state: %s" % (new_state)
 
     logger.debug("New state prediction: %s" % (new_state))
     return new_state
+
+  def __estimate_lob(self, current_state, lob):
+    """ Next state estimation for a single LOB.
+    Args:
+      current_state: The current system state.
+      lob: The current index of the LOB.
+    Returns:
+      The predicted next value of the LOB. """
+    position = self.__transmitter_positions[lob - self.LOB]
+    return np.arctan2(position[self._Y] - current_state[self.POS_Y],
+                      position[self._X] - current_state[self.POS_X])
 
   def __observation_function(self, current_state):
     """ Observation function. Tells us what our sensor readings should look like
@@ -144,16 +188,32 @@ class Kalman:
                                                       len(args)))
 
     observations.extend(args)
-    self.__observations = np.array(observations)
+    mask = []
+    for item in observations:
+      if item == None:
+        mask.append(True)
+      else:
+        mask.append(False)
+    self.__observations = np.ma.array(observations, mask=mask)
+    print "Observations: %s" % (self.__observations)
     logger.debug("Setting new observations: %s" % (self.__observations))
 
   def update(self):
     """ Updates the filter for one iteration. """
     logger.info("Updating kalman filter.")
+    self.__state_covariances = _positivise_covariance(self.__state_covariances)
+
+    print "State: \n%s" % (self.__state)
+    print "State Cov: \n%s" % (self.__state_covariances)
+    print "State Cov Eig: \n%s" % (np.linalg.eigvalsh(self.__state_covariances))
+    print "Observation: \n%s" % (self.__observations)
+    print "Observation Cov: \n%s" % (self.__observation_covariances)
     output = self.__kalman.filter_update(self.__state, self.__state_covariances,
                                          observation=self.__observations,
                                          observation_covariance=
-                                            self.__observation_covariances)
+                                            self.__observation_covariances,
+                                         transition_covariance=
+                                            self.__transition_covariances)
     self.__state, self.__state_covariances = output
     logger.debug("New state: %s, New state covariance: %s" % \
                  (self.__state, self.__state_covariances))
@@ -170,6 +230,12 @@ class Kalman:
       The position from the current state, in form (X, Y). """
     return (self.__state[self.POS_X], self.__state[self.POS_Y])
 
+  def velocity(self):
+    """
+    Returns:
+      The velocity from the current state, in the form (X, Y). """
+    return (self.__state[self.VEL_X], self.__state[self.VEL_Y])
+
   def state_covariances(self):
     """ Returns: The current state covariances. """
     return self.__state_covariances
@@ -180,6 +246,7 @@ class Kalman:
       lob: Our LOB to the transmitter. Note that this value should be normalized
       with normalize_lobs() before being added.
       location: Where we think that the transmitter is located. """
+    print "Adding transmitter at %s." % (str(location))
     self.__transmitter_positions.append(location)
 
     # Add the LOB to the state.
@@ -209,13 +276,29 @@ class Kalman:
     logger.debug("New observation covariances: %s" % \
         (self.__observation_covariances))
 
+    # Do a similar thing for the transition covariances.
+    new_transition_cov = _expand_matrix(self.__transition_covariances)
+    new_transition_cov[new_state_size - 1, new_state_size - 1] = \
+        self.LOB_MODEL_UNCERTAINTY
+
+    self.__transition_covariances = new_transition_cov
+    logger.debug("New transition covariances: %s" % \
+        (self.__transition_covariances))
+
   def set_transmitter_positions(self, positions):
     """ Sets new calculated positions for the transmitters.
     Args:
       positions: A dict of positions. The keys are the indices of transmitters
       in the state. """
+    # TODO (danielp): Find a better way of integrating new position
+    # measurements.
     for index, position in positions.iteritems():
-      self.__transmitter_positions[i - self.LOB] = position
+      old_position = self.__transmitter_positions[index - self.LOB]
+      shift_x = position[self._X] - old_position[self._X]
+      shift_y = position[self._Y] - old_position[self._Y]
+      new_pos = (old_position[self._X] + shift_x * 0.05,
+                 old_position[self._Y] + shift_y * 0.05)
+      self.__transmitter_positions[index - self.LOB] = new_pos
 
   def position_error_ellipse(self, stddevs):
     """ Gets a confidence error ellipse for our drone position
@@ -281,3 +364,8 @@ class Kalman:
     """ Returns:
       The number of transmitters we are currently tracking. """
     return len(self.__transmitter_positions)
+
+  def transmitter_positions(self):
+    """ Returns:
+      Its current best guess as to the position of the transmitters. """
+    return self.__transmitter_positions
