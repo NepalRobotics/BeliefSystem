@@ -60,6 +60,9 @@ class Kalman:
   VELOCITY_MODEL_UNCERTAINTY = 0.05
   # How good our model is of the LOBs.
   LOB_MODEL_UNCERTAINTY = 0.1
+  # Factor by which we scale measured changes to transmitter positions before
+  # adding them to the model.
+  TRANSMITTER_POSITION_GAIN = 0.05
 
   # The indices of various elements in the state.
   POS_X = 0
@@ -296,8 +299,10 @@ class Kalman:
       old_position = self.__transmitter_positions[index - self.LOB]
       shift_x = position[self._X] - old_position[self._X]
       shift_y = position[self._Y] - old_position[self._Y]
-      new_pos = (old_position[self._X] + shift_x * 0.05,
-                 old_position[self._Y] + shift_y * 0.05)
+      new_pos = (old_position[self._X] + shift_x * \
+                    self.TRANSMITTER_POSITION_GAIN,
+                 old_position[self._Y] + shift_y * \
+                    self.TRANSMITTER_POSITION_GAIN)
       self.__transmitter_positions[index - self.LOB] = new_pos
 
   def position_error_ellipse(self, stddevs):
