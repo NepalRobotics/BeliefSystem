@@ -65,9 +65,9 @@ class KalmanTests(_BaseTest):
 
     covariances = basic_filter.state_covariances()
 
-    # Our covariances should be even closer this time.
+    # Our covariances should be close again.
     for x in np.nditer(covariances):
-      self._assert_near(0, x, 0.01)
+      self._assert_near(0, x, 0.05)
 
   def test_going_forward(self):
     """ Tests that the model prediction still works if we rotate the whole thing
@@ -110,9 +110,9 @@ class KalmanTests(_BaseTest):
 
     covariances = basic_filter.state_covariances()
 
-    # Our covariances should be even closer this time.
+    # Our covariances should be close again.
     for x in np.nditer(covariances):
-      self._assert_near(0, x, 0.01)
+      self._assert_near(0, x, 0.05)
 
   def test_going_diagonal(self):
     """ Tests that the model still works if we go at 45 degrees. """
@@ -154,9 +154,9 @@ class KalmanTests(_BaseTest):
 
     covariances = basic_filter.state_covariances()
 
-    # Our covariances should be even closer this time.
+    # Our covariances should be close again.
     for x in np.nditer(covariances):
-      self._assert_near(0, x, 0.01)
+      self._assert_near(0, x, 0.05)
 
   def test_transmitter_adding(self):
     """ Tests that adding new transmitters in the middle works. """

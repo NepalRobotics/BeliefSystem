@@ -409,7 +409,7 @@ class BeliefManagerTests(tests.BaseTest):
     self.manager.set_old_state((self.manager.get_filter().state(),
         self.manager.get_filter().state_covariances()))
 
-    self.manager.transmitter_error_regions(1.96)
+    self.manager.transmitter_error_regions(1.96, {}, [])
 
     points = self.manager.get_last_error_regions()
 
@@ -474,6 +474,6 @@ class BeliefManagerTests(tests.BaseTest):
 
     # Get us away from the test output.
     print ""
-    for i in range(0, 76):
+    for i in range(0, 73):
       simulacrum.iterate()
       simulacrum.print_report()
