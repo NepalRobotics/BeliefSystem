@@ -278,10 +278,9 @@ class _EnvironmentSimulator(BeliefManager):
     readings = []
     for transmitter in self.__transmitters:
       # There's a chance that we won't even provide data for this one.
-      # TODO(danielp): Make it support this.
-      #if (np.random.randint(0, 10) >= 7):
-      #  print "Got random reading failure."
-      #  continue
+      if (np.random.randint(0, 10) >= 7):
+        print "Got random reading failure."
+        continue
 
       # Otherwise, the strength is calculated from our distance to it.
       inside = \
