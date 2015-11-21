@@ -21,6 +21,8 @@ class ErrorEllipseTests(tests.BaseTest):
     # These are the values we'd expect for the semi-axes. Rotation is trivial,
     # since all our covariances are zero.
     eigenvalues, _ = np.linalg.eigh(test_covariance)
+    order = eigenvalues.argsort()[::-1]
+    eigenvalues = eigenvalues[order]
     radii = test_z * np.sqrt(eigenvalues)
 
     points = statistics.error_ellipse(test_covariance, test_center, test_z,
@@ -43,8 +45,8 @@ class ErrorEllipseTests(tests.BaseTest):
     points = statistics.error_ellipse(test_covariance, test_center, test_z,
                                       test_points)
 
-    x_max_radius = test_z * test_covariance[0][0]
-    y_max_radius = test_z * test_covariance[1][1]
+    x_max_radius = test_z * test_covariance[1][1]
+    y_max_radius = test_z * test_covariance[0][0]
     for point in points:
       self.assertLessEqual(abs(point[0] - test_center[0]), x_max_radius)
       self.assertLessEqual(abs(point[1] - test_center[1]), y_max_radius)

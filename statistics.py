@@ -19,7 +19,9 @@ Returns:
   A list of all the points on the ellipse that were calculated. """
 def error_ellipse(covariance, center, z_score, points):
   # Calculate eigenvalues and eigenvectors, which define the ellipse.
-  eigenvalues, eigenvectors = np.linalg.eigh(covariance)
+  eigenvalues, _ = np.linalg.eigh(covariance)
+  order = eigenvalues.argsort()[::-1]
+  eigenvalues = eigenvalues[order]
   # Sometimes due to floating-point innacuracies, or eigenvalues get slightly
   # negative. If this happens, bump them back to a bit above zero. (They can't
   # be zero exactly, because they end up in the denominator.)
