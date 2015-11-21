@@ -175,6 +175,13 @@ class Kalman:
     # interesting.
     return current_state
 
+  def estimate_next_state(self):
+    """ Uses the transition function to estimate the next state based on the
+    current one.
+    Returns:
+      The estimated next state. """
+    return self.__transition_function(self.__state)
+
   def set_observations(self, position, velocity, *args):
     """ Sets what our observations are.
     Args:
@@ -340,7 +347,7 @@ class Kalman:
     indices = np.diag_indices(self.__state_size)
     # The first four are the position and velocity variances.
     indices = (indices[0][self.LOB:], indices[1][self.LOB:])
-    if not indices[0]:
+    if not len(indices[0]):
       # We're not tracking any transmitters:
       return []
 

@@ -1,5 +1,6 @@
 import collections
 import logging
+import sys
 
 import numpy as np
 
@@ -128,91 +129,69 @@ class BeliefManager(object):
       and the values are the tuple of the associated LOB and signal strength. It
       also returns a list of readings that are asumed to be from new
       transmitters. """
+    margins_of_error = \
+        self._filter.lob_confidence_intervals(self.ERROR_REGION_Z_SCORE)
 
-    def is_region_bisected(region, reading):
-      """ Takes a region and a line and determines if the line goes through the
-      region. Note that this is not a trivial operation, it's at worst O(n) on
-      the number of points in the region.
-      Args:
-        region: The region, defined as a point cloud.
-        reading: The reading that we are analyzing.
-      Returns:
-        True if the line goes through the region, False otherwise. """
-      # Convert the reading to a slope and intercept.
-      lob = reading[self._LOB]
-      slope = np.tan(lob)
-      intercept = self._observed_position_y - \
-                  self._observed_position_x * slope
+    # Center the interval around our predicted next LOBs.
+    predicted_state = self._filter.estimate_next_state()
+    intervals = []
+    for i in range(Kalman.LOB, len(predicted_state)):
+      lob = predicted_state[i]
+      margin_of_error = margins_of_error[i - Kalman.LOB]
+      intervals.append((lob - margin_of_error, lob + margin_of_error))
 
-      found_lower = False
-      found_higher = False
-      center_x = self._observed_position_x
-      center_y = self._observed_position_y
-      for point in region:
-        # It can't go backwards through the center.
-        relative_pos_x = point[self._X] - center_x
-        relative_pos_y = point[self._Y] - center_y
-        if ((lob > 0 and lob < np.pi / 2.0) and \
-            (relative_pos_x < 0 and relative_pos_y < 0)):
-          # If the bearing's in the first quadrant, ignore points in the third
-          # quadrant.
-          continue
-        if ((lob > np.pi / 2.0 and lob < np.pi) and \
-            (relative_pos_x > 0 and relative_pos_y < 0)):
-          # If the bearing's in the second quadrant, ignore points in the fourth
-          # quadrant.
-          continue
-        if ((lob > np.pi and lob < 3.0 * np.pi / 2) and \
-            (relative_pos_x > 0 and relative_pos_y > 0)):
-          # If the bearing's in the third quadrant, ignore points in the first
-          # quadrant.
-          continue
-        if ((lob > 3.0 * np.pi / 2 and lob < 2.0 * np.pi) and \
-            (relative_pos_x < 0 and relative_pos_y > 0)):
-          # If the bearing's in the fourth quadrant, ignore points in the second
-          # quadrant.
-          continue
+    logger.debug("LOB confidence intervals: %s" % (intervals))
+    print "LOB confidence intervals: %s" % (intervals)
 
-        # All we need to prove that the line goes through the region is to find
-        # two points that fall on different sides of it.
-        line_y = slope * point[self._X] + intercept
-        if point[self._Y] > line_y:
-          found_higher = True
-        elif point[self._Y] < line_y:
-          found_lower = True
-        else:
-          continue
-
-        if found_higher and found_lower:
-          return True
-
-      return False
-
-    # Transmitter positions should not change in an ideal world, so we should be
-    # able to make a pretty good guess as to what reading corresponds to what
-    # transmitter by what error regions they fall into.
+    # Now, go and check whether our new LOBs fit within them.
     associations = {}
     new_transmitters = []
-    # Check which LOBs pass through which error regions.
     for reading in readings:
-      # Check whether it goes through each region.
       associated = False
-      for transmitter, region in self._last_error_regions.iteritems():
-        print "Region for transmitter %d:%s" % (transmitter, region)
-        if is_region_bisected(region, reading):
-          associated = True
-          # Jot down that this LOB probably belongs to this transmitter.
-          if associations.get(transmitter):
-            # Pick the strongest signal.
-            if reading[self._STRENGTH] > \
-                associations[transmitter][self._STRENGTH]:
-              logger.debug("Dropping weak reading for transmitter %d: %s" % \
-                           (transmitter, associations[transmitter]))
-              associations[transmitter] = reading
-          else:
-            associations[transmitter] = reading
+      weak = False
+      best_center_distance = sys.maxint
+      best_transmitter = 0
 
-      if not associated:
+      lob = reading[self._LOB]
+      strength = reading[self._STRENGTH]
+
+      for i in range(0, len(intervals)):
+        transmitter = i + Kalman.LOB
+        lower_bound = intervals[i][0]
+        upper_bound = intervals[i][1]
+        if (lob >= lower_bound and lob <= upper_bound):
+          # It's in range.
+          old_association = associations.get(transmitter)
+          if old_association:
+            # If this one is a stronger signal, replace it.
+            if (strength <= old_association[self._STRENGTH]):
+              weak = True
+              continue
+            logger.debug("Replacing weak signal %f with %f." %
+                (old_association[self._LOB], lob))
+
+          # Find this reading's distance from the center of the interval.
+          center_distance = lob - (lower_bound + \
+            (upper_bound - lower_bound) / 2)
+          center_distance = abs(center_distance)
+          print "Center distance: %f" % (center_distance)
+          # If it's already associated, we go with whatever reading is closest
+          # to our expected value.
+          if associated:
+            if center_distance < best_center_distance:
+              # Use this one.
+              del associations[best_transmitter]
+            else:
+              # Otherwise, use the other one.
+              continue
+
+          associations[transmitter] = reading
+          associated = True
+          best_center_distance = center_distance
+          best_transmitter = transmitter
+
+      if (not associated and not weak):
+        # It fit inside none of our previous regions.
         logger.info("Asuming %s is new transmitter." % (str(reading)))
         new_transmitters.append(reading)
 
@@ -543,4 +522,6 @@ class BeliefManager(object):
     self._filter.update()
 
     # Save new error regions.
-    self._transmitter_error_regions(self.ERROR_REGION_Z_SCORE, existing, new)
+    # TODO(danielp): Uncomment this when we actually want to use error regions.
+    # For now, calculating them is kind of a waste of time.
+    #self._transmitter_error_regions(self.ERROR_REGION_Z_SCORE, existing, new)

@@ -343,8 +343,7 @@ class BeliefManagerTests(tests.BaseTest):
   def test_associate_lob_readings(self):
     """ Tests that we can associate LOB readings successfully. """
     # We'll start with something really obvious.
-    region = [(0, 0), (0, 2), (2, 2), (2, 0)]
-    self.manager.set_error_regions({1: region})
+    self.manager.get_filter().add_transmitter(np.pi / 4, (1, 1))
     reading1 = (np.pi / 4, 1.0)
     reading2 = (-np.pi / 4, 1.0)
 
@@ -352,27 +351,28 @@ class BeliefManagerTests(tests.BaseTest):
 
     # One should have been classified as a new one, one shouldn't have.
     self.assertEqual([reading2], new)
-    self.assertEqual({1: reading1}, associated)
+    self.assertEqual({4: reading1}, associated)
 
   def test_duplicate_association(self):
     """ Tests that it handles duplicate associations properly. """
-    region = [(0, 0), (0, 2), (2, 2), (2, 0)]
-    self.manager.set_error_regions({1: region})
+    self.manager.get_filter().add_transmitter(np.pi / 4, (1, 1))
     reading1 = (np.pi / 4, 1.0)
-    reading2 = (np.pi / 6, 0.5)
+    reading2 = (np.pi / 4.5, 0.5)
 
     associated, new = self.manager.associate_lob_readings([reading1, reading2])
-
     # It should ignore the second one since it has a lower strength.
     self.assertEqual([], new)
-    self.assertEqual({1: reading1}, associated)
+    self.assertEqual({4: reading1}, associated)
+
+    # ...even if we do it in the other order.
+    associated, new = self.manager.associate_lob_readings([reading2, reading1])
+    self.assertEqual([], new)
+    self.assertEqual({4: reading1}, associated)
 
   def test_complex_association(self):
     """ Tests a more complicated association case. """
-    test_covariance = np.array([[0.5, 0], [0, 1]])
-    region1 = statistics.error_ellipse(test_covariance, (5, 5), 1.96, 50)
-    region2 = statistics.error_ellipse(test_covariance, (10, 0), 1.96, 50)
-    self.manager.set_error_regions({1: region1, 2: region2})
+    self.manager.get_filter().add_transmitter(np.pi / 4, (5, 5))
+    self.manager.get_filter().add_transmitter(0, (10, 0))
 
     # Should go through region 1.
     reading1 = (np.pi / 4, 0.5)
@@ -387,6 +387,7 @@ class BeliefManagerTests(tests.BaseTest):
     associated, new = self.manager.associate_lob_readings(readings)
 
     self.assertEqual([reading3], new)
+    self.assertEqual({4: reading2, 5: reading4}, associated)
 
   def test_distance_from_past_states(self):
     """ Basic tests for its ability to calculate distances using information
