@@ -169,7 +169,7 @@ class _EnvironmentSimulator(BeliefManager):
     # simulated measurements.
     self.__position_stddev = 0.005
     self.__velocity_stddev = 0.1
-    self.__lob_stddev = 0.05
+    self.__lob_stddev = np.radians(5)
     self.__lob_strength_stddev = 0.1
 
     # These are the actual locations of the simulated transmitters.
@@ -423,7 +423,9 @@ class BeliefManagerTests(tests.BaseTest):
     """ Tests for the _update_past_lobs method. """
     self.manager.get_filter().add_transmitter(0, (0, 5))
     covariance = self.manager.get_filter().state_covariances()
-    self.manager.set_past_states(deque([((-5, 0, 1, 1, 0), covariance)]))
+    min_distance = BeliefManager.MIN_DISTANCE
+    self.manager.set_past_states(deque([((-min_distance, 0, 1, 1, 0),
+                                         covariance)]))
 
     # It should add them if they're not there already.
     self.manager.update_past_lobs()
@@ -433,7 +435,8 @@ class BeliefManagerTests(tests.BaseTest):
 
     # It should also replace them if we find one with a better variance.
     self.manager.set_past_lobs([(1, 50, 0, 0)])
-    self.manager.set_past_states(deque([((-5, 0, 1, 1, 0), covariance)]))
+    self.manager.set_past_states(deque([((-min_distance, 0, 1, 1, 0),
+                                         covariance)]))
     self.manager.update_past_lobs()
     lobs = self.manager.get_past_lobs()
     self.assertEqual(len(lobs), 1)
@@ -465,8 +468,25 @@ class BeliefManagerTests(tests.BaseTest):
     """
     np.random.seed(42)
 
-    # Add a few transmitters.
+    # Add a transmitter.
     transmitters = [(50, 50)]
+    # Add waypoints that should take us within range of them.
+    waypoints = [(70, 20)]
+
+    simulacrum = _EnvironmentSimulator(transmitters, waypoints, (0, 0), 1)
+
+    # Get us away from the test output.
+    print ""
+    for i in range(0, 73):
+      simulacrum.iterate()
+      simulacrum.print_report()
+
+  def test_complex_long_term(self):
+    """ Another, more complicated long-term iteration test. """
+    np.random.seed(971)
+
+    # Add a few transmitters.
+    transmitters = [(50, 50), (20, 25)]
     # Add waypoints that should take us within range of them.
     waypoints = [(70, 20)]
 

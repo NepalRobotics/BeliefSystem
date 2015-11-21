@@ -21,10 +21,10 @@ class BeliefManager(object):
   _Y = 1
 
   # Z-score to use when calculating error regions.
-  ERROR_REGION_Z_SCORE = 1.96
+  ERROR_REGION_Z_SCORE = 2.576
   # The minimum distance apart (m) two points need to be before we'll use them
   # to calculate a transmitter position.
-  MIN_DISTANCE = 5
+  MIN_DISTANCE = 15
 
   # We often store readings from the radio as LOB-strength tuples.
   _LOB = 0
