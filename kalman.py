@@ -24,8 +24,7 @@ def _expand_matrix(matrix):
 
 def _positivise_covariance(matrix):
   """ Nudges values in a matrix to keep it from becoming non-positive definite
-  due to floating point innacuracies. Note that it will fail loudly if it finds
-  itself needing to make anything more than minor changes.
+  due to floating point innacuracies.
   These changes are sourced from here:
   http://robotics.stackexchange.com/questions/2000/maintaining-positive-
       definite-property-for-covariance-in-an-unscented-kalman-fil
