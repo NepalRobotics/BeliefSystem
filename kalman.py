@@ -294,6 +294,37 @@ class Kalman:
     logger.debug("New transition covariances: %s" % \
         (self.__transition_covariances))
 
+  def remove_transmitter(self, index):
+    """ Removes a transmitter that was erroneously added.
+    Args:
+      index: The index of the transmitter in the state array.
+    """
+    logger.info("Removing transmitter: %d" % (index))
+
+    self.__transmitter_positions.pop(index - 4)
+
+    # Remove it from the state.
+    self.__state = np.delete(self.__state, index)
+    self.__state_size = self.__state.shape[0]
+    # Make sure the observations vector is the propper size.
+    self.__observations = np.delete(self.__observations, index)
+
+    # Resize the state covariance.
+    self.__state_covariances = np.delete(self.__state_covariances, index, 0)
+    self.__state_covariances = np.delete(self.__state_covariances, index, 1)
+
+    # Resize the observation covariances.
+    self.__observation_covariances = \
+        np.delete(self.__observation_covariances, index, 0)
+    self.__observation_covariances = \
+        np.delete(self.__observation_covariances, index, 1)
+
+    # Resize the transition covariances.
+    self.__transition_covariances = \
+        np.delete(self.__transition_covariances, index, 0)
+    self.__transition_covariances = \
+        np.delete(self.__transition_covariances, index, 1)
+
   def set_transmitter_positions(self, positions):
     """ Sets new calculated positions for the transmitters.
     Args:
@@ -380,3 +411,8 @@ class Kalman:
     """ Returns:
       Its current best guess as to the position of the transmitters. """
     return self.__transmitter_positions
+
+  def lobs(self):
+    """ Returns:
+      The set of LOBs in the state. """
+    return self.__state[4:]

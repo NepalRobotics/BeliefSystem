@@ -137,6 +137,30 @@ class _TestingBeliefManager(BeliefManager):
       The value of _past_lobs. """
     return self._past_lobs
 
+  def set_observed_transmitters(self, transmitters):
+    """ Sets the _observed_transmitters member variable.
+    Args:
+      transmitters: The observed transmitters to set.
+    """
+    self._observed_transmitters = transmitters
+
+  def set_cycle_data(self, cycle_data):
+    """ Sets the _cycle_data member variable.
+    Args:
+      cycle_data: What to change _cycle_data to. """
+    self._cycle_data = cycle_data
+
+  def set_cycle(self, cycle):
+    """ Sets that _cycle member variable.
+    Args:
+      cycle: The value of cycle to set. """
+    self._cycle = cycle
+
+  def prune_transmitters(self, *args, **kwargs):
+    """ Gives us access to _prune_transmitters for testing. See docs on
+    _prune_transmitters() for more information. """
+    return self._prune_transmitters(*args, **kwargs)
+
 
 class _EnvironmentSimulator(BeliefManager):
   """ Feeds data to a BeliefManager instance in order to simulate actual
@@ -250,7 +274,7 @@ class _EnvironmentSimulator(BeliefManager):
     """
     # TODO (danielp): Remove this method once we implement the base class
     # version.
-    distance = 40 - (strength * 40)
+    distance = self.RADIO_RANGE - (strength * self.RADIO_RANGE)
 
     x_shift = distance * np.cos(lob)
     y_shift = distance * np.sin(lob)
@@ -287,11 +311,10 @@ class _EnvironmentSimulator(BeliefManager):
           (transmitter[self._X] - self._filter.position()[self._X]) ** 2 + \
           (transmitter[self._Y] - self._filter.position()[self._Y]) ** 2
       distance = np.sqrt(inside)
-      # Assume our range is 40 m.
-      if distance > 40:
+      if distance > self.RADIO_RANGE:
         # Too far away to be visible.
         continue
-      strength = (40 - distance) / 40.0
+      strength = (self.RADIO_RANGE - distance) / self.RADIO_RANGE
       strength = np.random.normal(strength, self.__lob_strength_stddev)
       strength = min(strength, 1.0)
       strength = max(0, strength)
@@ -457,6 +480,46 @@ class BeliefManagerTests(tests.BaseTest):
     self.manager.set_autopilot_data((None, None), (None, None))
     self.manager.set_radio_data([])
     self.manager.iterate()
+
+  def test_remove_bad_transmitter(self):
+    """ Tests that we can intelligently remove bad transmitters. """
+    number_of_transmitters = deque([1] * self.manager.MAX_INNACTIVE_CYCLES)
+    self.manager.set_observed_transmitters(number_of_transmitters)
+
+    readings = [(0, 0.5)]
+    self.manager.get_filter().add_transmitter(0, (5, 0))
+    self.manager.get_filter().add_transmitter(np.pi / 4.0, (1, 1))
+
+    self.manager.set_cycle_data({4: 9, 5: 0})
+    self.manager.set_cycle(10)
+
+    self.manager.prune_transmitters(readings)
+
+    # It should have removed the second transmitter.
+    state = self.manager.get_filter().state()
+    self.assertEqual(5, len(state))
+    self.assertEqual(state[4], 0)
+
+  def test_remove_duplicate_transmitter(self):
+    """ Tests that it can intelligently remove duplicate transmitters. """
+    number_of_transmitters = deque([1] * self.manager.MAX_INNACTIVE_CYCLES)
+    self.manager.set_observed_transmitters(number_of_transmitters)
+
+    readings = [(0, 0.5), (np.pi / 4, 0.5)]
+    self.manager.get_filter().add_transmitter(0, (5, 0))
+    self.manager.get_filter().add_transmitter(0.1, (5, 0.2))
+    self.manager.get_filter().add_transmitter(np.pi / 4.0, (1, 1))
+
+    self.manager.set_cycle_data({4: 9, 5: 8})
+    self.manager.set_cycle(10)
+
+    self.manager.prune_transmitters(readings)
+
+    # It should have removed the second transmitter.
+    state = self.manager.get_filter().state()
+    self.assertEqual(6, len(state))
+    self.assertEqual(state[4], 0)
+    self.assertEqual(state[5], np.pi / 4)
 
   def test_iterate_basic(self):
     """ Basically makes sure that iterate() doesn't crash. """

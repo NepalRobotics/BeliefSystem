@@ -25,6 +25,12 @@ class BeliefManager(object):
   # The minimum distance apart (m) two points need to be before we'll use them
   # to calculate a transmitter position.
   MIN_DISTANCE = 15
+  # The number of cycles we have to go without receiving a reading from a
+  # particular transmitter in order to deem that transmitter nonexistent.
+  MAX_INNACTIVE_CYCLES = 10
+  # How far away (m) we can be from a transmitter signal and still register it,
+  # in average conditions.
+  RADIO_RANGE = 40.0
 
   # We often store readings from the radio as LOB-strength tuples.
   _LOB = 0
@@ -63,8 +69,17 @@ class BeliefManager(object):
     self._old_state = None
     # Keeps a record of past states.
     self._past_states = collections.deque()
+    # A record of the number of transmitters we've seen for the past few
+    # cycles.
+    self._observed_transmitters = collections.deque()
     # Error regions calculated from our last cycle.
     self._last_error_regions = {}
+    # A dictionary of transmitter indices. Each value is the cycle we last got
+    # data for it.
+    self._cycle_data = {}
+
+    # How many cycles we've run.
+    self._cycles = 0
 
   def _fetch_autopilot_data(self):
     """ Fetches measurements from the onboard Pixhawk autopilot, and updates the
@@ -186,6 +201,7 @@ class BeliefManager(object):
               continue
 
           associations[transmitter] = reading
+          self._cycle_data[transmitter] = self._cycles
           associated = True
           best_center_distance = center_distance
           best_transmitter = transmitter
@@ -194,6 +210,9 @@ class BeliefManager(object):
         # It fit inside none of our previous regions.
         logger.info("Asuming %s is new transmitter." % (str(reading)))
         new_transmitters.append(reading)
+        new_index = Kalman.LOB + self._filter.number_of_transmitters() + \
+            len(new_transmitters)
+        self._cycle_data[new_index] = self._cycles
 
     logger.debug("Associated bearings with transmitters: %s" % (associations))
     return (associations, new_transmitters)
@@ -467,6 +486,91 @@ class BeliefManager(object):
 
     self._old_state = (use_state, use_covariance)
 
+  def _prune_transmitters(self, readings):
+    """ Remove transmitters that were likely added erroneously.
+    Args:
+      readings: The raw readings from the radio. """
+    self._observed_transmitters.append(len(readings))
+    if len(self._observed_transmitters) > self.MAX_INNACTIVE_CYCLES:
+      self._observed_transmitters.popleft()
+
+    # If we've consistently been getting readings for fewer transmitters that we
+    # have, then it's likely that not all of them are real.
+    transmitters = self._filter.transmitter_positions()
+    position = self._filter.position()
+
+    # Start by eliminating transmitters that we are out of range of, as we are
+    # obviously not going to get signals from these ones.
+    visible_transmitters = []
+    for transmitter in transmitters:
+      distance = np.sqrt((transmitter[self._X] - position[self._X]) ** 2 + \
+                         (transmitter[self._Y] - position[self._Y] ** 2))
+      if distance <= self.RADIO_RANGE:
+        visible_transmitters.append(transmitter)
+
+    # Check if we are seeing fewer of the visible transmitters than we would
+    # expect.
+    for num_transmitters in self._observed_transmitters:
+      if num_transmitters >= len(visible_transmitters):
+        break
+    else:
+      # We are seeing too few transmitters.
+      logger.warning("Got readings for fewer transmitters than expected.")
+
+      # Check for a particular transmitter which we haven't gotten readings for
+      # in awhile.
+      for transmitter, cycle in self._cycle_data.iteritems():
+        if self._cycle - cycle >= self.MAX_INNACTIVE_CYCLES:
+          # This transmitter was likely the result of a single bad reading.
+          logger.warning("Transmitter %d last seen on cycle %d." % \
+              (transmitter, cycle))
+          self._filter.remove_transmitter(transmitter)
+          del self._cycle_data[transmitter]
+          break
+
+      else:
+        # In this case, we probably have a situation in which there are two
+        # duplicate transmitters.
+        logger.info("Removing duplicate transmitter.")
+
+        lobs = self._filter.lobs()
+        intervals = \
+            self._filter.lob_confidence_intervals(self.ERROR_REGION_Z_SCORE)
+        sort_indices = np.argsort(lobs)
+
+        # Find the confidence intervals with the greatest percentage overlap.
+        max_overlap = 0
+        left_overlap_index = None
+        right_overlap_index = None
+        for i in range(0, len(sort_indices) - 1):
+          index = sort_indices[i]
+          next_index = sort_indices[i + 1]
+          interval = (lobs[index] - intervals[index],
+                      lobs[index] + intervals[index])
+          next_interval = (lobs[next_index] - intervals[next_index],
+                           lobs[next_index] + intervals[next_index])
+
+          raw_overlap = interval[1] - next_interval[0]
+          total = next_interval[1] - interval[0]
+          overlap = raw_overlap / total
+
+          if overlap > max_overlap:
+            max_overlap = overlap
+            left_overlap_index = index
+            right_overlap_index = next_index
+
+        # Out of these two intervals, remove the transmitter with the larger
+        # one.
+        range1 = intervals[left_overlap_index] * 2
+        range2 = intervals[right_overlap_index] * 2
+
+        if range1 > range2:
+          self._filter.remove_transmitter(Kalman.LOB + left_overlap_index)
+          del self._cycle_data[Kalman.LOB + left_overlap_index]
+        else:
+          self._filter.remove_transmitter(Kalman.LOB + right_overlap_index)
+          del self._cycle_data[Kalman.LOB + right_overlap_index]
+
   def iterate(self):
     """ Runs a single iteration of the belief manager. """
     self._fetch_autopilot_data()
@@ -491,6 +595,9 @@ class BeliefManager(object):
     existing_transmitter_positions = self._calculate_distance(existing)
     # Update the positions.
     self._filter.set_transmitter_positions(existing_transmitter_positions)
+
+    # Remove duplicate and anomaly transmitters.
+    self._prune_transmitters(readings)
 
     # Set the measurements.
     # The last few lobs will all be the new ones.
@@ -525,3 +632,4 @@ class BeliefManager(object):
     # TODO(danielp): Uncomment this when we actually want to use error regions.
     # For now, calculating them is kind of a waste of time.
     #self._transmitter_error_regions(self.ERROR_REGION_Z_SCORE, existing, new)
+    self._cycles += 1
