@@ -156,7 +156,6 @@ class BeliefManager(object):
       intervals.append((lob - margin_of_error, lob + margin_of_error))
 
     logger.debug("LOB confidence intervals: %s" % (intervals))
-    print "LOB confidence intervals: %s" % (intervals)
 
     # Now, go and check whether our new LOBs fit within them.
     associations = {}
@@ -189,7 +188,6 @@ class BeliefManager(object):
           center_distance = lob - (lower_bound + \
             (upper_bound - lower_bound) / 2)
           center_distance = abs(center_distance)
-          print "Center distance: %f" % (center_distance)
           # If it's already associated, we go with whatever reading is closest
           # to our expected value.
           if associated:
@@ -257,7 +255,7 @@ class BeliefManager(object):
     Returns: A dict of tuples, with each tuple containing the estimated x and y
       position of the transmitter. The keys are the indices of the corresponding
       transmitters in the state. """
-    print "Past lobs: Calculating distance."
+    logger.debug("Past lobs: Calculating distance.")
     positions = {}
     for transmitter in transmitters:
       # Grab the data we need from the filtered state.
@@ -269,7 +267,6 @@ class BeliefManager(object):
       intersection = self._calculate_intersection(transmitter - Kalman.LOB,
                                                   current_lob, current_position)
 
-      print "Past lobs: intersect %s" % (str(intersection))
       positions[transmitter] = intersection
 
     return positions
@@ -338,10 +335,8 @@ class BeliefManager(object):
     past_measurement_transmitters = []
     for transmitter, reading in readings.iteritems():
       current_position = self._filter.position()
-      print "Past lobs: transmitter: %d" % (transmitter)
-      print "Past lobs: length: %d" % (len(self._past_lobs))
       if transmitter - Kalman.LOB >= len(self._past_lobs):
-        # Use strength.
+        # Use strength, this transmitter is too new.
         strength_readings[transmitter] = reading
         continue
 
@@ -351,7 +346,8 @@ class BeliefManager(object):
       past_measurement_transmitters.append(transmitter)
 
     distances = self._distance_from_strength(strength_readings)
-    print "Cycle: transmitters: %s" % (past_measurement_transmitters)
+    logger.debug("Distance: Using past data for transmitters: %s" % \
+                 (past_measurement_transmitters))
     distances2 = self._distance_from_past_states(past_measurement_transmitters)
     # Combine them.
     for transmitter, position in distances2.iteritems():
@@ -387,7 +383,6 @@ class BeliefManager(object):
       if (i - Kalman.LOB >= len(self._past_lobs)):
         # It's new enough that we're going to have to rely on the strength
         # calculations instead.
-        print "Calculating error region with strength."
         logger.debug("Falling back on strength calculator for %d." % (i))
 
         if i >= len(self._filter.state()) - len(new):
@@ -407,7 +402,6 @@ class BeliefManager(object):
 
       transformed_points = []
       for point in error_points:
-        print "Error point: %s" % (str(point))
         # Each point on the error ellipsoid has the same layout as the state...
         hypothetical_lob = point[i]
         hypothetical_position = (point[self._X], point[self._Y])
@@ -416,12 +410,9 @@ class BeliefManager(object):
         # drone position from within the error region instead.
         if (i - Kalman.LOB >= len(self._past_lobs)):
           logger.debug("Using strength: %f" % (strength))
-          print "Hypothetical pos: %s lob: %f strength: %f" % \
-              (str(hypothetical_position), hypothetical_lob, strength)
           new_location = \
               self._single_point_strength_distance(hypothetical_position,
                                                    hypothetical_lob, strength)
-          print "Hypothetical new: %s" % (str(new_location))
         else:
           new_location = self._calculate_intersection(i - Kalman.LOB,
                                                       hypothetical_lob,
@@ -454,8 +445,6 @@ class BeliefManager(object):
       else:
         # They're just going to get closer as we go up.
         break
-
-    print "Past lobs: use_state: %s" % (str(use_state))
 
     if use_state == None:
       # We didn't find anything far enough away.
@@ -577,11 +566,11 @@ class BeliefManager(object):
 
     # Check what transmitters we can see.
     readings = self._fetch_radio_data()
-    print "Got raw readings: %s" % (readings)
+    logger.debug("Got raw readings: %s" % (readings))
     # Figure out which readings correspond with which transmitters.
     existing, new = self._associate_lob_readings(readings)
-    print "Got new readings: %s" % (new)
-    print "Got old readings: %s" % (existing)
+    logger.debug("Got new readings: %s" % (new))
+    logger.debug("Got old readings: %s" % (existing))
     # Estimate a position for new transmitters based on the strength.
     new_transmitter_positions = self._distance_from_strength(new)
     # Add new transmitters to the state.
@@ -611,7 +600,6 @@ class BeliefManager(object):
     # Populate the existing LOB measurements.
     for index, reading in existing.iteritems():
       lob_measurements[index - Kalman.LOB] = reading[self._LOB]
-    print "LOB measurements: \n%s" % (lob_measurements)
 
     logger.debug("LOB Measurements: %s" % (lob_measurements))
     self._filter.set_observations((self._observed_position_x,
@@ -624,7 +612,6 @@ class BeliefManager(object):
                               self._filter.state_covariances()))
     # Update our selection of past LOBs.
     self._update_past_lobs()
-    print "Past lobs: new: %s" % (self._past_lobs)
 
     self._filter.update()
 

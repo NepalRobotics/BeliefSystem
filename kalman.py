@@ -145,11 +145,9 @@ class Kalman:
 
     for i in range(0, len(self.__transmitter_positions)):
       position = self.__transmitter_positions[i]
-      print "Using position: %s" % (str(position))
       # We can calculate our LOB too, based on our position.
       new_state[self.LOB + i] = self.__estimate_lob(current_state,
                                                     self.LOB + i)
-    print "Expecting state: %s" % (new_state)
 
     logger.debug("New state prediction: %s" % (new_state))
     return new_state
@@ -204,7 +202,6 @@ class Kalman:
       else:
         mask.append(False)
     self.__observations = np.ma.array(observations, mask=mask)
-    print "Observations: %s" % (self.__observations)
     logger.debug("Setting new observations: %s" % (self.__observations))
 
   def update(self):
@@ -212,11 +209,6 @@ class Kalman:
     logger.info("Updating kalman filter.")
     self.__state_covariances = _positivise_covariance(self.__state_covariances)
 
-    print "State: \n%s" % (self.__state)
-    print "State Cov: \n%s" % (self.__state_covariances)
-    print "State Cov Eig: \n%s" % (np.linalg.eigvalsh(self.__state_covariances))
-    print "Observation: \n%s" % (self.__observations)
-    print "Observation Cov: \n%s" % (self.__observation_covariances)
     output = self.__kalman.filter_update(self.__state, self.__state_covariances,
                                          observation=self.__observations,
                                          observation_covariance=
@@ -255,7 +247,7 @@ class Kalman:
       lob: Our LOB to the transmitter. Note that this value should be normalized
       with normalize_lobs() before being added.
       location: Where we think that the transmitter is located. """
-    print "Adding transmitter at %s." % (str(location))
+    logger.info("Adding transmitter at %s." % (str(location)))
     self.__transmitter_positions.append(location)
 
     # Add the LOB to the state.
