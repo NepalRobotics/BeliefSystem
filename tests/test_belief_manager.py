@@ -32,11 +32,11 @@ class _TestingBeliefManager(BeliefManager):
     Args:
       position: Tuple of the x and y position components.
       velocity: Tuple of the x and y velocity components. """
-    self.__observed_position_x = position[self._X]
-    self.__observed_position_y = position[self._Y]
+    self._observed_position_x = position[self._X]
+    self._observed_position_y = position[self._Y]
 
-    self.__observed_velocity_x = velocity[self._X]
-    self.__observed_velocity_y = velocity[self._Y]
+    self._observed_velocity_x = velocity[self._X]
+    self._observed_velocity_y = velocity[self._Y]
 
   def set_radio_data(self, readings):
     """ Allows us to set the radio data that will be fed into the class each
@@ -59,13 +59,17 @@ class _TestingBeliefManager(BeliefManager):
       past_lobs: The content for _past_lobs to use. """
     self._past_lobs = past_lobs
 
-  def set_observations(self, position, velocity):
-    """ Sets the current observations.
+  def set_past_states(self, states):
+    """ Sets the past states that we have a record of.
     Args:
-      position: The observed positon.
-      velocity: The observed velocity. """
-    self._observed_position_x, self._observed_position_y = position
-    self._observed_velocity_x, self._observed_velocity_y = velocity
+      states: The past states to set. """
+    self._past_states = states
+
+  def set_old_state(self, state):
+    """ Sets the _old_state member variable.
+    Args:
+      state: The state to set. """
+    self._old_state = state
 
   def set_past_states(self, states):
     """ Sets the past states that we have a record of.
@@ -443,6 +447,13 @@ class BeliefManagerTests(tests.BaseTest):
     lobs = self.manager.get_past_lobs()
     self.assertEqual(len(lobs), 1)
     self.assertEqual(lobs[0][0], 0)
+
+  def test_iterate_no_data(self):
+    """ Test that iterate doesn't crash even when we get no data from the
+    autopilot. """
+    self.manager.set_autopilot_data((None, None), (None, None))
+    self.manager.set_radio_data([])
+    self.manager.iterate()
 
   def test_iterate_basic(self):
     """ Basically makes sure that iterate() doesn't crash. """
