@@ -4,8 +4,6 @@ import sys
 
 import numpy as np
 
-from IPC.socket_ipc_factory import SocketIPCFactory
-
 from kalman import Kalman
 import statistics
 
