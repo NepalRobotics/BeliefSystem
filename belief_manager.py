@@ -29,6 +29,8 @@ class BeliefManager(object):
   # How far away (m) we can be from a transmitter signal and still register it,
   # in average conditions.
   RADIO_RANGE = 40.0
+  # Length of one cycle of the belief manager, in s.
+  CYCLE_LENGTH = 0.1
 
   # We often store readings from the radio as LOB-strength tuples.
   _LOB = 0
