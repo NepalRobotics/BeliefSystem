@@ -83,14 +83,9 @@ class _TestingBeliefManager(BeliefManager):
       state: The state to set. """
     self._old_state = state
 
-  def _fetch_autopilot_data(self):
+  def _fetch_data(self):
     """ Does nothing, but overrides the actual version of this method, which we
-    don't want to run during testing. """
-    pass
-
-  def _fetch_radio_data(self):
-    """ Overrides the actual version of this method, which we don't want to run
-    during testing.
+    don't want to run during testing.
     Returns:
       The radio data last set using set_radio_data. """
     return self.__radio_data
@@ -284,8 +279,10 @@ class _EnvironmentSimulator(BeliefManager):
 
     return (x, y)
 
-  def _fetch_autopilot_data(self):
-    """ Fetches simulated data from the autopilot. """
+  def _fetch_data(self):
+    """ Fetches simulated data from sensors.
+    Returns:
+      Simulated data from radio. """
     self._observed_velocity_x = np.random.normal(self.__actual_velocity_x,
                                                  self.__velocity_stddev)
     self._observed_velocity_y = np.random.normal(self.__actual_velocity_y,
@@ -296,9 +293,6 @@ class _EnvironmentSimulator(BeliefManager):
     self._observed_position_y = np.random.normal(self.__actual_position_y,
                                                  self.__position_stddev)
 
-  def _fetch_radio_data(self):
-    """ Fetches simulated data from the radio system.
-    See docs for BeliefManager._fetch_radio_data(). """
     readings = []
     for transmitter in self.__transmitters:
       # There's a chance that we won't even provide data for this one.

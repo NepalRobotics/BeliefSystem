@@ -4,6 +4,8 @@ import sys
 
 import numpy as np
 
+from Core.process import Process
+
 from kalman import Kalman
 import statistics
 
@@ -11,7 +13,7 @@ import statistics
 logger = logging.getLogger(__name__)
 
 
-class BeliefManager(object):
+class BeliefManager(Process):
   """ Deals with high-level belief system control, including sending and receiving
   data as well as interfacing with the Kalman filter. """
   # Constants for x and y indices in coordinate tuples.
@@ -36,25 +38,26 @@ class BeliefManager(object):
   _LOB = 0
   _STRENGTH = 1
 
-  def __init__(self, autopilot_queue, wireless_queue, radio_queue):
+  def __init__(self, belief_queue, wireless_queue):
     """ Args:
-      autopilot_queue: The queue to use for reading autopilot data.
+      belief_queue: The queue for reading autopilot and radio data.
       wireless_queue: The queue to use for communicating with the WiFi system.
-      radio_queue: The queue to use for communicating with the RDF system. """
+    """
+    super(BeliefManager, self).__init__()
+
     self._initialize_member_variables()
 
-    # Initialize connections to the Pixhawk reader and wireless
-    # communications handler, as well as the transmitter locator.
-    self.__autopilot = autopilot_queue
+    # Initialize connections to the wireless communications handler, as well as
+    # incomming data from the aggregator process.
+    self.__aggregator = belief_queue
     self.__wireless = wireless_queue
-    self.__radio = radio_queue
 
-    self._fetch_autopilot_data()
+    self._fetch_data()
     # Initialize the Kalman filter.
     self._filter = Kalman((self._observed_position_x,
-                            self._observed_position_y),
-                           (self._observed_velocity_x,
-                            self._observed_velocity_y))
+                           self._observed_position_y),
+                          (self._observed_velocity_x,
+                           self._observed_velocity_y))
 
   def _initialize_member_variables(self):
     """ Initializes essential member variables. This is mostly so that we can
@@ -81,34 +84,40 @@ class BeliefManager(object):
     # How many cycles we've run.
     self._cycles = 0
 
-  def _fetch_autopilot_data(self):
-    """ Fetches measurements from the onboard Pixhawk autopilot, and updates the
-    member variables for vehicle position and velocity observations accordingly.
+  def _fetch_data(self):
+    """ Fetches measurements from the aggregator, updates observed position and
+    velocity member variables, and returns radio data.
+    Returns:
+        A list containing one tuple for every object sighted by the radio.
+        Each tuple contains the LOB measurement and signal strength.
     """
-    # Read the latest data from the autopilot.
-    sensor_data = self.__autopilot.read_front(block=False)
-    if not sensor_data:
-      # No new sensor data. This is really a problem, because it is designed to
-      # handle intermittent radio data, but data from the other sensors should
-      # be fairly consistent.
-      logger.error("Got no new data from autopilot!")
-
-      self._observed_position_x = None
-      self._observed_position_y = None
-      self._observed_velocity_x = None
-      self._observed_velocity_y = None
-
-      return
+    # Read the latest data from the aggregator.
+    sensor_data = self.__aggregator.get()
 
     self._observed_position_x = sensor_data.latitude
     self._observed_position_y = sensor_data.longitude
 
-    self._observed_velocity_x = sensor_data.velocity[self._X]
-    self._observed_velocity_y = sensor_data.velocity[self._Y]
+    self._observed_velocity_x = sensor_data.x_velocity
+    self._observed_velocity_y = sensor_data.y_velocity
 
-    logger.info("Got new sensor data: position: (%f, %f), velocity: (%f, %f)" \
-                % (self._observed_position_x, self._observed_position_y,
-                   self._observed_velocity_x, self._observed_velocity_y))
+    # We convert them to strings, because they could be None.
+    logger.debug("Got new sensor data: position: (%s, %s), velocity: (%s, %s)" \
+                % (str(self._observed_position_x),
+                   str(self._observed_position_y),
+                   str(self._observed_velocity_x),
+                   str(self._observed_velocity_y)))
+
+    normalized = []
+    for lob, strength in sensor_data.radio_data:
+      # Normalize the LOB, so that the angle will still be correct even if the
+      # drone starts flying in a different direction.
+      # TODO (danielp): Deal with the fact that the drone could have been flying
+      # a different direction when this reading was taken.
+      nomalized_lob = self._filter.normalize_lobs(lob)
+
+      normalized.append((normalized_lob, strength))
+
+    return normalized
 
   def _fetch_radio_data(self):
     """ Fetches measurements from the radio.
@@ -117,20 +126,11 @@ class BeliefManager(object):
         Each tuple contains the LOB measurement and signal strength. """
     transmitters = []
 
-    # Keep reading data until we have no more to read.
     while True:
       signal = self.__radio.read_next(block=False)
       if not signal:
         # No more data.
         break
-
-      # Normalize the LOB, so that the angle will still be correct even if the
-      # drone starts flying in a different direction.
-      # TODO (danielp): Deal with the fact that the drone could have been flying
-      # a different direction when this reading was taken.
-      nomalized_lob = self._filter.normalize_lobs(signal.lob)
-
-      transmitters.append((normalized_lob, signal.strength))
 
     return transmitters
 
@@ -562,10 +562,11 @@ class BeliefManager(object):
 
   def iterate(self):
     """ Runs a single iteration of the belief manager. """
-    self._fetch_autopilot_data()
+    logger.debug("Starting iteration.")
 
-    # Check what transmitters we can see.
-    readings = self._fetch_radio_data()
+    # Check what transmitters we can see, and update drone position
+    # measurements.
+    readings = self._fetch_data()
     logger.debug("Got raw readings: %s" % (readings))
     # Figure out which readings correspond with which transmitters.
     existing, new = self._associate_lob_readings(readings)
@@ -620,3 +621,13 @@ class BeliefManager(object):
     # For now, calculating them is kind of a waste of time.
     #self._transmitter_error_regions(self.ERROR_REGION_Z_SCORE, existing, new)
     self._cycles += 1
+
+  def _run(self):
+    """ Entry point for the process. """
+    logger.info("Starting BeliefManager process.")
+
+    while True:
+      # No PLL stuff is needed here, because it will automatically be
+      # synchronized to the aggregator process, since it reads its input data
+      # from there.
+      self.iterate()
