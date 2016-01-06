@@ -2,9 +2,9 @@ import logging
 import Queue
 import time
 
-from Core.message_object import BeliefMessage
-from Core.process import Process
-from Core.utils import PhasedLoopLimiter
+from Utils.message_object import BeliefMessage
+from Utils.process import Process
+from Utils.utils import PhasedLoopLimiter
 
 from belief_manager import BeliefManager
 

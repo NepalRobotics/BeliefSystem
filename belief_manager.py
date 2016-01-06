@@ -4,7 +4,7 @@ import sys
 
 import numpy as np
 
-from Core.process import Process
+from Utils.process import Process
 
 from kalman import Kalman
 import statistics

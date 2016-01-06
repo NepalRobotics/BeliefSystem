@@ -3,8 +3,8 @@
 
 import unittest
 
-from Core.message_object import VehicleState, RadioState, BeliefMessage
-from Core.utils import TestQueue
+from Utils.message_object import VehicleState, RadioState, BeliefMessage
+from Utils.utils import TestQueue
 
 from belief_manager import BeliefManager
 import aggregator
