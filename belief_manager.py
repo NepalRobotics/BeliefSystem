@@ -5,6 +5,7 @@ import sys
 import numpy as np
 
 from Utils.process import Process
+from Utils import nr_logger
 
 from kalman import Kalman
 import statistics
