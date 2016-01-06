@@ -52,13 +52,6 @@ class BeliefManager(Process):
     self.__aggregator = belief_queue
     self.__wireless = wireless_queue
 
-    self._fetch_data()
-    # Initialize the Kalman filter.
-    self._filter = Kalman((self._observed_position_x,
-                           self._observed_position_y),
-                          (self._observed_velocity_x,
-                           self._observed_velocity_y))
-
   def _initialize_member_variables(self):
     """ Initializes essential member variables. This is mostly so that we can
     call this function during testing without calling all of __init__. """
@@ -625,6 +618,19 @@ class BeliefManager(Process):
   def _run(self):
     """ Entry point for the process. """
     logger.info("Starting BeliefManager process.")
+
+    # Initialize the Kalman filter.
+    self._fetch_data()
+    while (not self._observed_position_x or not self._observed_position_y or \
+           not self._observed_velocity_x or not self._observed_position_y):
+      self._fetch_data()
+      logger.warning("Got blank data, delaying filter initialization.")
+
+    self._filter = Kalman((self._observed_position_x,
+                           self._observed_position_y),
+                          (self._observed_velocity_x,
+                           self._observed_velocity_y))
+    logger.info("Got initial data.")
 
     while True:
       # No PLL stuff is needed here, because it will automatically be
