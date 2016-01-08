@@ -177,7 +177,7 @@ class Aggregator(Process):
                                            count, message.y_velocity)
       count += 1
 
-    if not count:
+    if count == 1:
       logger.warning("Got no drone position data for this cycle.")
 
     try:
