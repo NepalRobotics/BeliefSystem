@@ -1,3 +1,4 @@
+import math
 import logging
 import Queue
 import time
@@ -45,6 +46,8 @@ class Aggregator(Process):
 
   # The maximum number of messages it can read from any queue in one iteration.
   MAX_MESSAGE_READ = 1000
+  # The radius of the earth. (km)
+  EARTH_RADIUS = 6371
 
   def __init__(self, mav_queue, radio_queue, belief_queue):
     """ Args:
@@ -67,6 +70,12 @@ class Aggregator(Process):
     self.__future_radio = {}
     self.__future_mav = {}
 
+    # Our initial latitude and longitude. It doesn't actually matter where these
+    # are really, but we set them to our initial position to keep the numbers
+    # small.
+    self.__start_latitude = None
+    self.__start_longitude = None
+
   def __cycle_from_time(self, time):
     """ Gets the cycle number we are on based on where cycle_zero denotes the
     start of the first cycle.
@@ -81,6 +90,37 @@ class Aggregator(Process):
       cycle += 1
 
     return max(int(cycle), 1)
+
+  def __wgs_to_offset(self, latitude, longitude):
+    """ Converts a GPS reading from the WGS84 format to an offset in meters
+    from a defined starting location.
+    It uses the formula found here:
+    http://andrew.hedges.name/experiments/haversine/
+    Args:
+      latitude: The latitude of the point to covert.
+      longitude: The longitude of the point to convert.
+    Returns:
+      A tuple containing the converted point in meters, with the first item
+      representing the x (longitude) direction, and the second representing the
+      y (latitude) direction. """
+    # Convert everything to radians to make it work right.
+    latitude = math.radians(latitude)
+    longitude = math.radians(longitude)
+
+    delta_lat = latitude - self.__start_latitude
+    delta_lon = longitude - self.__start_longitude
+
+    a_y = math.sin(delta_lat / 2.0) ** 2
+    c_y = 2.0 * math.atan2(math.sqrt(a_y), math.sqrt(1 - a_y))
+    a_x = math.cos(self.__start_latitude) * math.cos(latitude) * \
+          math.sin(delta_lon / 2.0) ** 2
+    c_x = 2.0 * math.atan2(math.sqrt(a_x), math.sqrt(1 - a_x))
+
+    # Get distance in each component.
+    x = self.EARTH_RADIUS * 1000 * c_x
+    y = self.EARTH_RADIUS * 1000 * c_y
+
+    return (x, y)
 
   def iterate(self):
     """ Runs a single iteration of the process. This should be synched with the
@@ -164,18 +204,36 @@ class Aggregator(Process):
     message.radio_data = radio_buffer
 
     count = 1
+    average_latitude = 0
+    average_longitude = 0
+    average_x_vel = 0
+    average_y_vel = 0
     for saved_data in cycle_data:
       # Average vehicle state data. (We might as well oversample to minimize
       # variation...)
-      message.latitude = _moving_average(saved_data.latitude, count,
-                                         message.latitude)
-      message.longitude = _moving_average(saved_data.longitude, count,
-                                          message.longitude)
-      message.x_velocity = _moving_average(saved_data.velocity_array[0],
-                                           count, message.x_velocity)
-      message.y_velocity = _moving_average(saved_data.velocity_array[1],
-                                           count, message.y_velocity)
+      average_latitude = _moving_average(saved_data.latitude, count,
+                                         average_latitude)
+      average_longitude = _moving_average(saved_data.longitude, count,
+                                          average_longitude)
+      average_x_vel = _moving_average(saved_data.velocity_array[0],
+                                      count, average_x_vel)
+      average_y_vel = _moving_average(saved_data.velocity_array[1],
+                                      count, average_y_vel)
       count += 1
+
+    # Convert data from WGS84 to an offset in meters.
+    if cycle_data:
+      if (self.__start_latitude == None or self.__start_longitude == None):
+        # Set the initial position.
+        self.__start_latitude = math.radians(average_latitude)
+        self.__start_longitude = math.radians(average_longitude)
+        logger.debug("Setting initial location: (%f, %f)" % \
+                    (self.__start_longitude, self.__start_latitude))
+
+      message.x_pos, message.y_pos = self.__wgs_to_offset(average_latitude,
+                                                          average_longitude)
+      message.x_velocity = average_x_vel
+      message.y_velocity = average_y_vel
 
     if count == 1:
       logger.warning("Got no drone position data for this cycle.")

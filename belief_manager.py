@@ -88,8 +88,8 @@ class BeliefManager(Process):
     # Read the latest data from the aggregator.
     sensor_data = self.__aggregator.get()
 
-    self._observed_position_x = sensor_data.latitude
-    self._observed_position_y = sensor_data.longitude
+    self._observed_position_x = sensor_data.x_pos
+    self._observed_position_y = sensor_data.y_pos
 
     self._observed_velocity_x = sensor_data.x_velocity
     self._observed_velocity_y = sensor_data.y_velocity
