@@ -1,7 +1,8 @@
-import math
 import logging
 import Queue
 import time
+
+import numpy as np
 
 from Utils.message_object import BeliefMessage
 from Utils.process import Process
@@ -104,17 +105,17 @@ class Aggregator(Process):
       representing the x (longitude) direction, and the second representing the
       y (latitude) direction. """
     # Convert everything to radians to make it work right.
-    latitude = math.radians(latitude)
-    longitude = math.radians(longitude)
+    latitude = np.radians(latitude)
+    longitude = np.radians(longitude)
 
     delta_lat = latitude - self.__start_latitude
     delta_lon = longitude - self.__start_longitude
 
-    a_y = math.sin(delta_lat / 2.0) ** 2
-    c_y = 2.0 * math.atan2(math.sqrt(a_y), math.sqrt(1 - a_y))
-    a_x = math.cos(self.__start_latitude) * math.cos(latitude) * \
-          math.sin(delta_lon / 2.0) ** 2
-    c_x = 2.0 * math.atan2(math.sqrt(a_x), math.sqrt(1 - a_x))
+    a_y = np.sin(delta_lat / 2.0) ** 2
+    c_y = 2.0 * np.arctan2(np.sqrt(a_y), np.sqrt(1 - a_y))
+    a_x = np.cos(self.__start_latitude) * np.cos(latitude) * \
+          np.sin(delta_lon / 2.0) ** 2
+    c_x = 2.0 * np.arctan2(np.sqrt(a_x), np.sqrt(1 - a_x))
 
     # Get distance in each component.
     x = self.EARTH_RADIUS * 1000 * c_x
@@ -225,8 +226,8 @@ class Aggregator(Process):
     if cycle_data:
       if (self.__start_latitude == None or self.__start_longitude == None):
         # Set the initial position.
-        self.__start_latitude = math.radians(average_latitude)
-        self.__start_longitude = math.radians(average_longitude)
+        self.__start_latitude = np.radians(average_latitude)
+        self.__start_longitude = np.radians(average_longitude)
         logger.debug("Setting initial location: (%f, %f)" % \
                     (self.__start_longitude, self.__start_latitude))
 
