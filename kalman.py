@@ -44,6 +44,7 @@ class Kalman:
   nose of the plane, where zero is straight forward. Before they are added to
   the filter, they should be transformed according to the velocity, so
   everything in the state is computed with the positive x axis as zero. """
+
   # Our initial uncertainty of our drone positions. GPS is not terribly
   # innacurate, so there isn't a ton of uncertainty here.
   DRONE_POSITION_UNCERTAINTY = 0.001
@@ -408,3 +409,30 @@ class Kalman:
     """ Returns:
       The set of LOBs in the state. """
     return self.__state[4:]
+
+  def flip_transmitter(self, transmitter):
+    """ Flips a transmitter's LOB by 180 degrees. Also updates the assumed
+    transmitter position, taking into account the new information.
+    Args:
+      transmitter: The index of the transmitter in the state which we are
+      flipping. """
+    # Flip the LOB.
+    lob = self.__state[transmitter]
+    lob += np.pi
+    # Keep it in range.
+    lob %= 2 * np.pi
+
+    logger.debug("Flipping LOB %d to %f." % (transmitter, lob))
+    self.__state[transmitter] = lob
+
+    # Now update our calculated position for the transmitter.
+    trans_x, trans_y = self.__transmitter_positions[transmitter - self.LOB]
+    drone_x, drone_y = self.position()
+    d_x = trans_x - drone_x
+    d_y = trans_y - drone_y
+    new_x = drone_x - d_x
+    new_y = drone_y - d_y
+
+    logger.debug("Setting flipped position for %d from (%f, %f) to (%f, %f)." \
+                 % (transmitter, trans_x, trans_y, new_x, new_y))
+    self.__transmitter_positions[transmitter - self.LOB] = (new_x, new_y)

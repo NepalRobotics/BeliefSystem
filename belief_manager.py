@@ -2,6 +2,7 @@ import collections
 import logging
 import sys
 
+from scipy.spatial.distance import euclidean
 import numpy as np
 
 from Utils.process import Process
@@ -34,6 +35,13 @@ class BeliefManager(Process):
   RADIO_RANGE = 40.0
   # Length of one cycle of the belief manager, in s.
   CYCLE_LENGTH = 0.1
+  # How far we have to have traveled (m) in the direction of a transmitter's LOB
+  # before we can test it to see whether it needs to flip 180 degrees.
+  MIN_PAIR_ELIMINATION_DISTANCE = 15
+  # The minimum absolute value of the difference in signal strength at the two
+  # positions we are testing before we can make a conclusion about whether the
+  # trasmitter has to flip 180 degrees.
+  MIN_STRENGTH_DIFF = 0.3
 
   # We often store readings from the radio as LOB-strength tuples.
   _LOB = 0
@@ -74,6 +82,16 @@ class BeliefManager(Process):
     # A dictionary of transmitter indices. Each value is the cycle we last got
     # data for it.
     self._cycle_data = {}
+    # A set that keeps track of transmitters for which we still do not know
+    # which of the two possible locations for it are correct. Transmitters are
+    # stored by their indices in the state.
+    self._paired_transmitters = set()
+    # For the same transmitters in _paired_transmitters, this dictionary
+    # associates the last drone position when the transmitter was sighted, along
+    # with the strength, with each transmitter index.
+    self._paired_strengths = {}
+    # A list of transmitters for which we are using the "flipped" bearing.
+    self.__flip_transmitters = []
 
     # How many cycles we've run.
     self._cycles = 0
@@ -204,6 +222,9 @@ class BeliefManager(Process):
         new_transmitters.append(reading)
         new_index = Kalman.LOB + self._filter.number_of_transmitters() + \
             len(new_transmitters)
+        self._paired_transmitters.add(new_index)
+        self._paired_strengths[new_index] = (self._filter.position(),
+                                              reading[self._STRENGTH])
         self._cycle_data[new_index] = self._cycles
 
     logger.debug("Associated bearings with transmitters: %s" % (associations))
@@ -431,8 +452,8 @@ class BeliefManager(Process):
     for state, covariance in self._past_states:
       old_pos_x = state[self._X]
       old_pos_y = state[self._Y]
-      if (np.sqrt((current_x - old_pos_x) ** 2 + \
-                  (current_y - old_pos_y) ** 2) >= self.MIN_DISTANCE):
+      if euclidean((current_x, current_y), (old_pos_x, old_pos_y)) >= \
+         self.MIN_DISTANCE:
         use_state = state
         use_covariance = covariance
         used += 1
@@ -554,6 +575,84 @@ class BeliefManager(Process):
           self._filter.remove_transmitter(Kalman.LOB + right_overlap_index)
           del self._cycle_data[Kalman.LOB + right_overlap_index]
 
+  def _condense_virtual_tranmitters(self, associated):
+    """ Because our RDF system registers two possible transmitter bearings 180
+    degrees apart, we initially end up with "virtual" transmitters, because we
+    don't know which one is correct. This method observes how the strength
+    changes as the drone changes position, and uses that to infer which
+    measurement is correct.
+    Args:
+      associated: A dictionary of associated radio readings for this cycle. The
+      data in here may be modified. """
+    to_delete = []
+    for transmitter_index in self._paired_transmitters:
+      reading = associated.get(transmitter_index)
+      if not reading:
+        # We don't have enough data to do this.
+        continue
+
+      # First of all, see if we've moved enough in the direction of the
+      # transmitter's LOB to justify testing it.
+      lob = self._filter.state()[transmitter_index]
+      # Turn the LOB into a unit vector.
+      lob = (np.cos(lob), np.sin(lob))
+
+      # First, compute a vector for our position change.
+      seen_at_drone_position = self._paired_strengths[transmitter_index][0]
+      old_x_pos, old_y_pos = seen_at_drone_position
+      x_pos, y_pos = self._filter.position()
+      d_position = (x_pos - old_x_pos, y_pos - old_y_pos)
+
+      # Now, find the component of this vector that is in the direction of our
+      # LOB.
+      distance = np.dot(d_position, lob) / np.linalg.norm(lob)
+      if abs(distance) < self.MIN_PAIR_ELIMINATION_DISTANCE:
+        # We're still too close.
+        continue
+
+      # Check to make sure there's a large enough difference in our strengths.
+      old_strength = self._paired_strengths[transmitter_index][1]
+      strength = reading[self._STRENGTH]
+      if abs(strength - old_strength) < self.MIN_STRENGTH_DIFF:
+        # There's not enough of a difference in strengths to conclude anything.
+        continue
+
+      # Now, determine which version of the LOB we are picking.
+      if ((distance > 0 and strength - old_strength < 0) or \
+          (distance < 0 and strength - old_strength > 0)):
+        # We want the version 180 degrees away.
+        self._filter.flip_transmitter(transmitter_index)
+        self.__flip_transmitters.append(transmitter_index)
+      # Otherwise, we want the version we have now.
+
+      to_delete.append(transmitter_index)
+      self._paired_strengths.pop(transmitter_index)
+
+    # Remove all the transmitters from _paired_transmitters that we should have.
+    for transmitter_index in to_delete:
+      self._paired_transmitters.remove(transmitter_index)
+
+    # Now, actually flip the associated measurements that need to be flipped.
+    self.__flip_lobs_if_needed(associated)
+
+  def __flip_lobs_if_needed(self, associated):
+    """ A helper function that looks at a dictionary of associated LOBs, and
+    flips any ones that need to be flipped, according to __flip_transmitters.
+    Args:
+      associated: The dictionary of associated LOBs. """
+    for transmitter in self.__flip_transmitters:
+      reading = associated.get(transmitter)
+      if not reading:
+        # We didn't get a reading for this transmitter on this cycle.
+        continue
+
+      logger.debug("Flipping LOB for transmitter %d." % (transmitter))
+      lob, strength = reading
+      lob += np.pi
+      lob %= 2 * np.pi
+
+      associated[transmitter] = (lob, strength)
+
   def iterate(self):
     """ Runs a single iteration of the belief manager. """
     logger.debug("Starting iteration.")
@@ -562,10 +661,16 @@ class BeliefManager(Process):
     # measurements.
     readings = self._fetch_data()
     logger.debug("Got raw readings: %s" % (readings))
+
     # Figure out which readings correspond with which transmitters.
     existing, new = self._associate_lob_readings(readings)
     logger.debug("Got new readings: %s" % (new))
     logger.debug("Got old readings: %s" % (existing))
+
+    # Check to see if we can make any conclusions about which version of each
+    # existing LOB is correct.
+    self._condense_virtual_tranmitters(existing)
+
     # Estimate a position for new transmitters based on the strength.
     new_transmitter_positions = self._distance_from_strength(new)
     # Add new transmitters to the state.

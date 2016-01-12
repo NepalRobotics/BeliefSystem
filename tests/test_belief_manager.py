@@ -12,14 +12,17 @@ import tests
 
 class _TestingBeliefManager(BeliefManager):
   """ A class for testing the belief manager. """
-  def __init__(self):
+
+  def __init__(self, initial_position=(0, 0), initial_velocity=(0, 0)):
+    """
+    Args:
+      initial_position: Optional way to specify an initial position.
+      initial_velocity: Optional way to specify an initial velocity. """
     self._initialize_member_variables()
 
     # Zero out initial observations.
-    self._observed_position_x = 0
-    self._observed_position_y = 0
-    self._observed_velocity_x = 0
-    self._observed_velocity_y = 0
+    self._observed_position_x, self._observed_position_y = initial_position
+    self._observed_velocity_x, self._observed_velocity_y = initial_velocity
 
     self._filter = Kalman((self._observed_position_x,
                            self._observed_position_y),
@@ -155,6 +158,35 @@ class _TestingBeliefManager(BeliefManager):
     """ Gives us access to _prune_transmitters for testing. See docs on
     _prune_transmitters() for more information. """
     return self._prune_transmitters(*args, **kwargs)
+
+  def set_paired_transmitters(self, paired_transmitters):
+    """ Sets the _paired_transmitters member variable.
+    Args:
+      paired_transmitters: The value to set. """
+    self._paired_transmitters = paired_transmitters
+
+  def get_paired_transmitters(self):
+    """
+    Returns:
+      The value of _paired_transmitters. """
+    return self._paired_transmitters
+
+  def get_paired_strengths(self):
+    """
+    Returns:
+      The value of _paired_strengths. """
+    return self._paired_strengths
+
+  def set_paired_strengths(self, paired_strengths):
+    """ Sets the _paired_strengths member variable.
+    Args:
+      paired_strengths: The value to set. """
+    self._paired_strengths = paired_strengths
+
+  def condense_virtual_tranmitters(self, *args, **kwargs):
+    """ Gives us access to _condense_virtual_tranmitters for testing. See docs
+    on _condense_virtual_tranmitters() for more information. """
+    return self._condense_virtual_tranmitters(*args, **kwargs)
 
 
 class _EnvironmentSimulator(BeliefManager):
@@ -514,6 +546,66 @@ class BeliefManagerTests(tests.BaseTest):
     self.assertEqual(6, len(state))
     self.assertEqual(state[4], 0)
     self.assertEqual(state[5], np.pi / 4)
+
+  def test_lob_choosing(self):
+    """ Tests that when we have to choose between the two possibilities for a
+    transmitter location, we can do so intelligently and reliably. """
+    distance = BeliefManager.MIN_PAIR_ELIMINATION_DISTANCE
+    manager = _TestingBeliefManager((0, 0), (distance * 2, distance * 2))
+
+    paired_transmitters = set([4])
+    paired_strengths = {4: ((0, 0), 0.5)}
+    manager.get_filter().add_transmitter(np.pi / 4.0,
+                                         (distance * 4, distance * 4))
+
+    manager.set_paired_transmitters(paired_transmitters)
+    manager.set_paired_strengths(paired_strengths)
+
+    # Pick some new observed values.
+    associated = {4: (np.pi / 4.0, 1.0)}
+    # Make us move.
+    manager.get_filter().set_observations((30, 30), (30, 30), np.pi / 4.0)
+    manager.get_filter().update()
+
+    # Now, try to condense transmitters.
+    manager.condense_virtual_tranmitters(associated)
+
+    # Nothing should have really changed in the filter.
+    self._assert_near(np.pi / 4.0, manager.get_filter().state()[4], 0.001)
+    self.assertEqual(np.pi / 4.0, associated[4][0])
+    # However, _paired_transmitters and _paired_strengths should now be empty.
+    self.assertEqual(set(), manager.get_paired_transmitters())
+    self.assertEqual({}, manager.get_paired_strengths())
+
+  def test_other_lob_choosing(self):
+    """ Another test very similar to the one above, except this time it should
+    choose the other option. """
+    distance = BeliefManager.MIN_PAIR_ELIMINATION_DISTANCE
+    manager = _TestingBeliefManager((0, 0), (distance * 2, distance * 2))
+
+    paired_transmitters = set([4])
+    paired_strengths = {4: ((0, 0), 0.5)}
+    manager.get_filter().add_transmitter(np.pi / 4.0,
+                                         (distance * 4, distance * 4))
+
+    manager.set_paired_transmitters(paired_transmitters)
+    manager.set_paired_strengths(paired_strengths)
+
+    # Pick some new observed values.
+    associated = {4: (np.pi / 4.0, 0.1)}
+    # Make us move.
+    manager.get_filter().set_observations((30, 30), (30, 30), np.pi / 4.0)
+    manager.get_filter().update()
+
+    # Now, try to condense transmitters.
+    manager.condense_virtual_tranmitters(associated)
+
+    # Our LOB should have flipped.
+    self._assert_near(5.0 * np.pi / 4.0, manager.get_filter().state()[4], 0.001)
+    self.assertEqual(5.0 * np.pi / 4.0, associated[4][0])
+    # Also, _paired_transmitters and _paired_strengths should now be empty.
+    self.assertEqual(set(), manager.get_paired_transmitters())
+    self.assertEqual({}, manager.get_paired_strengths())
 
   def test_iterate_basic(self):
     """ Basically makes sure that iterate() doesn't crash. """
