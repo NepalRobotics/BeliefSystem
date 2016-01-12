@@ -90,8 +90,6 @@ class BeliefManager(Process):
     # associates the last drone position when the transmitter was sighted, along
     # with the strength, with each transmitter index.
     self._paired_strengths = {}
-    # A list of transmitters for which we are using the "flipped" bearing.
-    self.__flip_transmitters = []
 
     # How many cycles we've run.
     self._cycles = 0
@@ -585,6 +583,7 @@ class BeliefManager(Process):
       associated: A dictionary of associated radio readings for this cycle. The
       data in here may be modified. """
     to_delete = []
+    flip_transmitters = set()
     for transmitter_index in self._paired_transmitters:
       reading = associated.get(transmitter_index)
       if not reading:
@@ -622,7 +621,7 @@ class BeliefManager(Process):
           (distance < 0 and strength - old_strength > 0)):
         # We want the version 180 degrees away.
         self._filter.flip_transmitter(transmitter_index)
-        self.__flip_transmitters.append(transmitter_index)
+        flip_transmitters.add(transmitter_index)
       # Otherwise, we want the version we have now.
 
       to_delete.append(transmitter_index)
@@ -633,14 +632,16 @@ class BeliefManager(Process):
       self._paired_transmitters.remove(transmitter_index)
 
     # Now, actually flip the associated measurements that need to be flipped.
-    self.__flip_lobs_if_needed(associated)
+    self.__flip_lobs_if_needed(associated, flip_transmitters)
 
-  def __flip_lobs_if_needed(self, associated):
+  def __flip_lobs_if_needed(self, associated, flip_transmitters):
     """ A helper function that looks at a dictionary of associated LOBs, and
-    flips any ones that need to be flipped, according to __flip_transmitters.
+    flips any ones that should be flipped.
     Args:
-      associated: The dictionary of associated LOBs. """
-    for transmitter in self.__flip_transmitters:
+      associated: The dictionary of associated LOBs.
+      flip_transmitters: These are new transmitters that we have just decided
+      need to be flipped. """
+    for transmitter in flip_transmitters:
       reading = associated.get(transmitter)
       if not reading:
         # We didn't get a reading for this transmitter on this cycle.
@@ -652,6 +653,45 @@ class BeliefManager(Process):
       lob %= 2 * np.pi
 
       associated[transmitter] = (lob, strength)
+
+    # For all the rest of the transmitters, choose the option that keeps us
+    # closest to our last lob. This will be correct even if we have passed right
+    # over the transmitter.
+    if not len(self._past_states):
+      # Nothing to do here...
+      return
+    last_state = self._past_states.pop()
+    self._past_states.append(last_state)
+    for i in range(Kalman.LOB, len(last_state)):
+      if i in self._paired_transmitters:
+        # We're still not sure at all which version of this one is right.
+        continue
+      if i in flip_transmitters:
+        # This one should already be correct.
+        continue
+      reading = associated.get(i)
+      if not reading:
+        # We don't have any measurement for it this cycle.
+        continue
+
+      new_lob, strength = reading
+      last_lob = last_state[i]
+      opposite_lob = (new_lob + np.pi) % (2.0 * np.pi)
+
+      first_possible_diff = abs(new_lob - last_lob)
+      first_possible_diff = min(first_possible_diff,
+                                2.0 * np.pi - first_possible_diff)
+      second_possible_diff = abs(opposite_lob - last_lob)
+      second_possible_diff = min(second_possible_diff,
+                                 2.0 * np.pi - second_possible_diff)
+
+      if second_possible_diff < first_possible_diff:
+        # Flip it.
+        logger.debug("Flipping LOB for transmitter %d." % (i))
+        new_lob += np.pi
+        new_lob %= 2 * np.pi
+
+        associated[i] = (new_lob, strength)
 
   def iterate(self):
     """ Runs a single iteration of the belief manager. """

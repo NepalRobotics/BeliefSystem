@@ -74,12 +74,6 @@ class _TestingBeliefManager(BeliefManager):
       state: The state to set. """
     self._old_state = state
 
-  def set_past_states(self, states):
-    """ Sets the past states that we have a record of.
-    Args:
-      states: The past states to set. """
-    self._past_states = states
-
   def set_old_state(self, state):
     """ Sets the _old_state member variable.
     Args:
@@ -606,6 +600,55 @@ class BeliefManagerTests(tests.BaseTest):
     # Also, _paired_transmitters and _paired_strengths should now be empty.
     self.assertEqual(set(), manager.get_paired_transmitters())
     self.assertEqual({}, manager.get_paired_strengths())
+
+  def test_transmitter_flip_consistency(self):
+    """ Tests that it chooses the correct LOB for a transmitter even when we fly
+    directly over it, and the LOB from the sensors changes. """
+    manager = _TestingBeliefManager((0, 0), (1, 1))
+    # Add a transmitter.
+    manager.get_filter().add_transmitter(np.pi / 4.0, (2, 2))
+    past_states = deque()
+    past_states.append(manager.get_filter().state())
+
+    # Make us move.
+    manager.get_filter().set_observations((1, 1), (1, 1), np.pi / 4.0)
+    manager.get_filter().update()
+    manager.set_past_states(past_states)
+    past_states.append(manager.get_filter().state())
+
+    # Try to condense transmitters.
+    associated = {4: (np.pi / 4.0, 0.5)}
+    manager.condense_virtual_tranmitters(associated)
+
+    # Nothing should have changed.
+    self.assertEqual(np.pi / 4.0, associated[4][0])
+
+    # Now, move again.
+    manager.get_filter().set_observations((2, 2), (1, 1), 0)
+    manager.get_filter().update()
+    manager.set_past_states(past_states)
+    past_states.append(manager.get_filter().state())
+
+    # Try to condense transmitters again.
+    associated[4] = (0, 1.0)
+    manager.condense_virtual_tranmitters(associated)
+
+    # Again, things should be exactly how we would expect.
+    self.assertEqual(0, associated[4][0])
+
+    # Move past the transmitter.
+    manager.get_filter().set_observations((3, 3), (1, 1), 5.0 * np.pi / 4.0)
+    manager.get_filter().update()
+    manager.set_past_states(past_states)
+    past_states.append(manager.get_filter().state())
+
+    # Now, the fun part. As soon as we're past the transmitter, the LOB won't
+    # flip.
+    associated = {4: (np.pi / 4.0, 0.5)}
+    manager.condense_virtual_tranmitters(associated)
+
+    # However, the code should be smart enough to recognize that it should.
+    self.assertEqual(5.0 * np.pi / 4.0, associated[4][0])
 
   def test_iterate_basic(self):
     """ Basically makes sure that iterate() doesn't crash. """
