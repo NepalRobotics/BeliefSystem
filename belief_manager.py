@@ -3,6 +3,7 @@ import logging
 import sys
 
 from scipy.spatial.distance import euclidean
+from scipy.stats import linregress
 import numpy as np
 
 from Utils.process import Process
@@ -42,6 +43,12 @@ class BeliefManager(Process):
   # positions we are testing before we can make a conclusion about whether the
   # trasmitter has to flip 180 degrees.
   MIN_STRENGTH_DIFF = 0.3
+  # The minimum amount of saved data points we have to have to do a linear
+  # regression for strength data.
+  MIN_DATA_FOR_REGRESSION = 12
+  # Minimum value for R^2 in our strength regression before we throw out our
+  # data and start over.
+  MIN_R_SQUARED = 0.6
 
   # We often store readings from the radio as LOB-strength tuples.
   _LOB = 0
@@ -88,7 +95,8 @@ class BeliefManager(Process):
     self._paired_transmitters = set()
     # For the same transmitters in _paired_transmitters, this dictionary
     # associates the last drone position when the transmitter was sighted, along
-    # with the strength, with each transmitter index.
+    # with the strength, with each transmitter index. It keeps track of a series
+    # of such associations for each transmitter.
     self._paired_strengths = {}
 
     # How many cycles we've run.
@@ -167,6 +175,11 @@ class BeliefManager(Process):
 
     logger.debug("LOB confidence intervals: %s" % (intervals))
 
+    # Make sure that any paired strengths entries that we don't have data for
+    # will end up being set to None.
+    for key in self._paired_strengths.keys():
+      self._paired_strengths[key].append(None)
+
     # Now, go and check whether our new LOBs fit within them.
     associations = {}
     new_transmitters = []
@@ -174,7 +187,7 @@ class BeliefManager(Process):
       associated = False
       weak = False
       best_center_distance = sys.maxint
-      best_transmitter = 0
+      best_transmitter = None
 
       lob = reading[self._LOB]
       strength = reading[self._STRENGTH]
@@ -201,28 +214,29 @@ class BeliefManager(Process):
           # If it's already associated, we go with whatever reading is closest
           # to our expected value.
           if associated:
-            if center_distance < best_center_distance:
-              # Use this one.
-              del associations[best_transmitter]
-            else:
-              # Otherwise, use the other one.
+            if center_distance >= best_center_distance:
+              # Use the other one.
               continue
 
-          associations[transmitter] = reading
-          self._cycle_data[transmitter] = self._cycles
           associated = True
           best_center_distance = center_distance
           best_transmitter = transmitter
 
+      if associated:
+        associations[best_transmitter] = reading
+        self._cycle_data[best_transmitter] = self._cycles
+        self._paired_strengths[best_transmitter][-1] = \
+            (self._filter.position(), reading[self._STRENGTH])
+
       if (not associated and not weak):
         # It fit inside none of our previous regions.
         logger.info("Asuming %s is new transmitter." % (str(reading)))
-        new_transmitters.append(reading)
         new_index = Kalman.LOB + self._filter.number_of_transmitters() + \
             len(new_transmitters)
+        new_transmitters.append(reading)
         self._paired_transmitters.add(new_index)
-        self._paired_strengths[new_index] = (self._filter.position(),
-                                              reading[self._STRENGTH])
+        self._paired_strengths[new_index] = [(self._filter.position(),
+                                              reading[self._STRENGTH])]
         self._cycle_data[new_index] = self._cycles
 
     logger.debug("Associated bearings with transmitters: %s" % (associations))
@@ -585,6 +599,38 @@ class BeliefManager(Process):
     to_delete = []
     flip_transmitters = set()
     for transmitter_index in self._paired_transmitters:
+      # If we pass over a transmitter during the course of measuring strengths, we
+      # end up with an ambiguous data set. A good data set should look about like
+      # a straight line. Before we do anything, then, we evaluate the usefulness
+      # of our data set initially using a linear regression.
+      times = []
+      strengths = []
+      time = 0
+      reading_count = 0
+      # Build the x dataset, which is time, in this case measured in cycles.
+      for pair in self._paired_strengths[transmitter_index]:
+        if pair != None:
+          # If we missed a point, we skip that cycle.
+          times.append(time)
+          strengths.append(pair[self._STRENGTH])
+          reading_count += 1
+        time += 1
+
+      # We need a certain amount of data for this to be useful.
+      if reading_count < self.MIN_DATA_FOR_REGRESSION:
+        logger.warning("Not enough data from transmitter %d for regression." % \
+                       (transmitter_index))
+        continue
+
+      _, _, r, _, _ = linregress(times, strengths)
+      logger.debug("Got r^2 value of %f." % (r ** 2))
+      if r ** 2 < self.MIN_R_SQUARED:
+        logger.debug("r^2 is too big!")
+        # This data is crap, so we might as well start over collecting new data.
+        self._paired_strengths[transmitter_index] = \
+            [self._paired_strengths[transmitter_index][0]]
+        continue
+
       reading = associated.get(transmitter_index)
       if not reading:
         # We don't have enough data to do this.
@@ -597,7 +643,7 @@ class BeliefManager(Process):
       lob = (np.cos(lob), np.sin(lob))
 
       # First, compute a vector for our position change.
-      seen_at_drone_position = self._paired_strengths[transmitter_index][0]
+      seen_at_drone_position = self._paired_strengths[transmitter_index][0][0]
       old_x_pos, old_y_pos = seen_at_drone_position
       x_pos, y_pos = self._filter.position()
       d_position = (x_pos - old_x_pos, y_pos - old_y_pos)
@@ -610,7 +656,7 @@ class BeliefManager(Process):
         continue
 
       # Check to make sure there's a large enough difference in our strengths.
-      old_strength = self._paired_strengths[transmitter_index][1]
+      old_strength = self._paired_strengths[transmitter_index][0][1]
       strength = reading[self._STRENGTH]
       if abs(strength - old_strength) < self.MIN_STRENGTH_DIFF:
         # There's not enough of a difference in strengths to conclude anything.
