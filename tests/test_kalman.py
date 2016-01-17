@@ -208,3 +208,17 @@ class KalmanTests(_BaseTest):
     # We should have a non-zero margin of error.
     error = basic_filter.lob_confidence_intervals(1.96)
     self.assertGreater(error, 0)
+
+  def test_flip_transmitter(self):
+    """ Tests that the flip_transmitter method works. """
+    my_filter = kalman.Kalman((0, 0), (1, 1))
+
+    # Do something really easy first.
+    lob = np.pi / 4.0
+    my_filter.add_transmitter(lob, (2, 2))
+    my_filter.flip_transmitter(4)
+    self.assertEqual(5.0 * np.pi / 4.0, my_filter.lobs()[0])
+
+    # Now we should be able to flip it back.
+    my_filter.flip_transmitter(4)
+    self.assertEqual(np.pi / 4.0, my_filter.lobs()[0])

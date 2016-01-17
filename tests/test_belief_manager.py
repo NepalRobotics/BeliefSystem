@@ -12,14 +12,17 @@ import tests
 
 class _TestingBeliefManager(BeliefManager):
   """ A class for testing the belief manager. """
-  def __init__(self):
+
+  def __init__(self, initial_position=(0, 0), initial_velocity=(0, 0)):
+    """
+    Args:
+      initial_position: Optional way to specify an initial position.
+      initial_velocity: Optional way to specify an initial velocity. """
     self._initialize_member_variables()
 
     # Zero out initial observations.
-    self._observed_position_x = 0
-    self._observed_position_y = 0
-    self._observed_velocity_x = 0
-    self._observed_velocity_y = 0
+    self._observed_position_x, self._observed_position_y = initial_position
+    self._observed_velocity_x, self._observed_velocity_y = initial_velocity
 
     self._filter = Kalman((self._observed_position_x,
                            self._observed_position_y),
@@ -70,12 +73,6 @@ class _TestingBeliefManager(BeliefManager):
     Args:
       state: The state to set. """
     self._old_state = state
-
-  def set_past_states(self, states):
-    """ Sets the past states that we have a record of.
-    Args:
-      states: The past states to set. """
-    self._past_states = states
 
   def set_old_state(self, state):
     """ Sets the _old_state member variable.
@@ -155,6 +152,35 @@ class _TestingBeliefManager(BeliefManager):
     """ Gives us access to _prune_transmitters for testing. See docs on
     _prune_transmitters() for more information. """
     return self._prune_transmitters(*args, **kwargs)
+
+  def set_paired_transmitters(self, paired_transmitters):
+    """ Sets the _paired_transmitters member variable.
+    Args:
+      paired_transmitters: The value to set. """
+    self._paired_transmitters = paired_transmitters
+
+  def get_paired_transmitters(self):
+    """
+    Returns:
+      The value of _paired_transmitters. """
+    return self._paired_transmitters
+
+  def get_paired_strengths(self):
+    """
+    Returns:
+      The value of _paired_strengths. """
+    return self._paired_strengths
+
+  def set_paired_strengths(self, paired_strengths):
+    """ Sets the _paired_strengths member variable.
+    Args:
+      paired_strengths: The value to set. """
+    self._paired_strengths = paired_strengths
+
+  def condense_virtual_tranmitters(self, *args, **kwargs):
+    """ Gives us access to _condense_virtual_tranmitters for testing. See docs
+    on _condense_virtual_tranmitters() for more information. """
+    return self._condense_virtual_tranmitters(*args, **kwargs)
 
 
 class _EnvironmentSimulator(BeliefManager):
@@ -360,10 +386,17 @@ class BeliefManagerTests(tests.BaseTest):
   def test_associate_lob_readings(self):
     """ Tests that we can associate LOB readings successfully. """
     # We'll start with something really obvious.
-    self.manager.get_filter().add_transmitter(np.pi / 4, (1, 1))
     reading1 = (np.pi / 4, 1.0)
     reading2 = (-np.pi / 4, 1.0)
 
+    # Add the first reading as a new transmitter.
+    associated, new = self.manager.associate_lob_readings([reading1])
+    self.assertEqual({}, associated)
+    self.assertEqual([reading1], new)
+
+    self.manager.get_filter().add_transmitter(np.pi / 4, (1, 1))
+
+    # Now the first one should already have been seen.
     associated, new = self.manager.associate_lob_readings([reading1, reading2])
 
     # One should have been classified as a new one, one shouldn't have.
@@ -372,7 +405,12 @@ class BeliefManagerTests(tests.BaseTest):
 
   def test_duplicate_association(self):
     """ Tests that it handles duplicate associations properly. """
-    self.manager.get_filter().add_transmitter(np.pi / 4, (1, 1))
+    true_reading = (np.pi / 4, 0.5)
+    associated, new = self.manager.associate_lob_readings([true_reading])
+    self.assertEqual({}, associated)
+    self.assertEqual([true_reading], new)
+    self.manager.get_filter().add_transmitter(true_reading[0], (1, 1))
+
     reading1 = (np.pi / 4, 1.0)
     reading2 = (np.pi / 4.5, 0.5)
 
@@ -388,8 +426,14 @@ class BeliefManagerTests(tests.BaseTest):
 
   def test_complex_association(self):
     """ Tests a more complicated association case. """
-    self.manager.get_filter().add_transmitter(np.pi / 4, (5, 5))
-    self.manager.get_filter().add_transmitter(0, (10, 0))
+    # Add these two transmitters initially.
+    true_readings = [(np.pi / 4, 0.5), (0, 0.5)]
+    associated, new = self.manager.associate_lob_readings(true_readings)
+    self.assertEqual({}, associated)
+    self.assertEqual(true_readings, new)
+
+    self.manager.get_filter().add_transmitter(true_readings[0][0], (5, 5))
+    self.manager.get_filter().add_transmitter(true_readings[1][0], (10, 0))
 
     # Should go through region 1.
     reading1 = (np.pi / 4, 0.5)
@@ -514,6 +558,163 @@ class BeliefManagerTests(tests.BaseTest):
     self.assertEqual(6, len(state))
     self.assertEqual(state[4], 0)
     self.assertEqual(state[5], np.pi / 4)
+
+  def test_lob_choosing(self):
+    """ Tests that when we have to choose between the two possibilities for a
+    transmitter location, we can do so intelligently and reliably. """
+    distance = BeliefManager.MIN_PAIR_ELIMINATION_DISTANCE
+    manager = _TestingBeliefManager((0, 0), (distance * 2, distance * 2))
+
+    paired_transmitters = set([4])
+
+    reading_list = []
+    dstrength = 1.0 / BeliefManager.MIN_DATA_FOR_REGRESSION
+    for i in range(1, BeliefManager.MIN_DATA_FOR_REGRESSION + 1):
+      reading_list.append(((0, 0), i * dstrength))
+    paired_strengths = {4: reading_list}
+    manager.get_filter().add_transmitter(np.pi / 4.0,
+                                         (distance * 4, distance * 4))
+
+    manager.set_paired_transmitters(paired_transmitters)
+    manager.set_paired_strengths(paired_strengths)
+
+    # Pick some new observed values.
+    associated = {4: (np.pi / 4.0, 1.0)}
+    # Make us move.
+    manager.get_filter().set_observations((30, 30), (30, 30), np.pi / 4.0)
+    manager.get_filter().update()
+
+    # Now, try to condense transmitters.
+    manager.condense_virtual_tranmitters(associated)
+
+    # Nothing should have really changed in the filter.
+    self._assert_near(np.pi / 4.0, manager.get_filter().state()[4], 0.001)
+    self.assertEqual(np.pi / 4.0, associated[4][0])
+    # However, _paired_transmitters and _paired_strengths should now be empty.
+    self.assertEqual(set(), manager.get_paired_transmitters())
+    self.assertEqual({}, manager.get_paired_strengths())
+
+  def test_other_lob_choosing(self):
+    """ Another test very similar to the one above, except this time it should
+    choose the other option. """
+    distance = BeliefManager.MIN_PAIR_ELIMINATION_DISTANCE
+    manager = _TestingBeliefManager((0, 0), (distance * 2, distance * 2))
+
+    paired_transmitters = set([4])
+
+    reading_list = []
+    dstrength = 0.9 / BeliefManager.MIN_DATA_FOR_REGRESSION
+    for i in range(1, BeliefManager.MIN_DATA_FOR_REGRESSION + 1):
+      reading_list.append(((0, 0), 1.0 - i * dstrength))
+    paired_strengths = {4: reading_list}
+    manager.get_filter().add_transmitter(np.pi / 4.0,
+                                        (distance * 4, distance * 4))
+
+    manager.set_paired_transmitters(paired_transmitters)
+    manager.set_paired_strengths(paired_strengths)
+
+    # Pick some new observed values.
+    associated = {4: (np.pi / 4.0, 0.1)}
+    # Make us move.
+    manager.get_filter().set_observations((30, 30), (30, 30), np.pi / 4.0)
+    manager.get_filter().update()
+
+    # Now, try to condense transmitters.
+    manager.condense_virtual_tranmitters(associated)
+
+    # Our LOB should have flipped.
+    self._assert_near(5.0 * np.pi / 4.0, manager.get_filter().state()[4], 0.001)
+    self.assertEqual(5.0 * np.pi / 4.0, associated[4][0])
+    # Also, _paired_transmitters and _paired_strengths should now be empty.
+    self.assertEqual(set(), manager.get_paired_transmitters())
+    self.assertEqual({}, manager.get_paired_strengths())
+
+  def test_transmitter_flip_consistency(self):
+    """ Tests that it chooses the correct LOB for a transmitter even when we fly
+    directly over it, and the LOB from the sensors changes. """
+    manager = _TestingBeliefManager((0, 0), (1, 1))
+    # Add a transmitter.
+    manager.get_filter().add_transmitter(np.pi / 4.0, (2, 2))
+    past_states = deque()
+    past_states.append(manager.get_filter().state())
+
+    # Make us move.
+    manager.get_filter().set_observations((1, 1), (1, 1), np.pi / 4.0)
+    manager.get_filter().update()
+    manager.set_past_states(past_states)
+    past_states.append(manager.get_filter().state())
+
+    # Try to condense transmitters.
+    associated = {4: (np.pi / 4.0, 0.5)}
+    manager.condense_virtual_tranmitters(associated)
+
+    # Nothing should have changed.
+    self.assertEqual(np.pi / 4.0, associated[4][0])
+
+    # Now, move again.
+    manager.get_filter().set_observations((2, 2), (1, 1), 0)
+    manager.get_filter().update()
+    manager.set_past_states(past_states)
+    past_states.append(manager.get_filter().state())
+
+    # Try to condense transmitters again.
+    associated[4] = (0, 1.0)
+    manager.condense_virtual_tranmitters(associated)
+
+    # Again, things should be exactly how we would expect.
+    self.assertEqual(0, associated[4][0])
+
+    # Move past the transmitter.
+    manager.get_filter().set_observations((3, 3), (1, 1), 5.0 * np.pi / 4.0)
+    manager.get_filter().update()
+    manager.set_past_states(past_states)
+    past_states.append(manager.get_filter().state())
+
+    # Now, the fun part. As soon as we're past the transmitter, the LOB won't
+    # flip.
+    associated = {4: (np.pi / 4.0, 0.5)}
+    manager.condense_virtual_tranmitters(associated)
+
+    # However, the code should be smart enough to recognize that it should.
+    self.assertEqual(5.0 * np.pi / 4.0, associated[4][0])
+
+  def test_regression_analysis(self):
+    """ Tests that the linear regression analysis throws out bad data. """
+    distance = BeliefManager.MIN_PAIR_ELIMINATION_DISTANCE
+    manager = _TestingBeliefManager((0, 0), (distance * 2, distance * 2))
+
+    # Here's some bad data. This hardcoded part is here mostly to make sure we
+    # don't get a good fit by chance.
+    bad_data = [((0, 0), 0.5), ((0, 0), 1.0), ((0, 0), 0.1), ((0, 0), 0.7),
+                ((0, 0), 0.3), ((0, 0), 1.0), ((0, 0), 0.8), ((0, 0), 0.1)]
+    # Add any extras that are needed.
+    for i in range(len(bad_data), BeliefManager.MIN_DATA_FOR_REGRESSION):
+      bad_data.append(((0, 0), np.random.random_sample()))
+
+    paired_strengths = {4: bad_data}
+    manager.get_filter().add_transmitter(np.pi / 4.0,
+                                        (distance * 4, distance * 4))
+
+    paired_transmitters = set([4])
+    manager.set_paired_transmitters(paired_transmitters)
+    manager.set_paired_strengths(paired_strengths)
+
+    # Pick some new observed values.
+    associated = {4: (np.pi / 4.0, 1.0)}
+    # Make us move.
+    manager.get_filter().set_observations((30, 30), (30, 30), np.pi / 4.0)
+    manager.get_filter().update()
+
+    # Now, try to condense transmitters.
+    manager.condense_virtual_tranmitters(associated)
+
+    # Nothing should have really changed in the filter.
+    self._assert_near(np.pi / 4.0, manager.get_filter().state()[4], 0.001)
+    self.assertEqual(np.pi / 4.0, associated[4][0])
+    # _paired_transmitters and _paired_strengths should not be empty, because we
+    # should not have condensed it.
+    self.assertEqual(paired_transmitters, manager.get_paired_transmitters())
+    self.assertEqual({4: [bad_data[0]]}, manager.get_paired_strengths())
 
   def test_iterate_basic(self):
     """ Basically makes sure that iterate() doesn't crash. """
