@@ -377,6 +377,49 @@ class _EnvironmentSimulator(BeliefManager):
 
     self.__cycles += 1
 
+  def check_position(self, expected):
+    """ Checks that the position in the simulation is within 0.5 meters of an
+    expected position.
+    Args:
+      expected: Expected position. (X, Y)
+    Returns:
+      True if the check passes, False otherwise. """
+    position = self._filter.position()
+    if abs(position[self._X] - expected[self._X]) > 0.5:
+      return False
+    if abs(position[self._Y] - expected[self._Y]) > 0.5:
+      return False
+
+    return True
+
+  def check_velocity(self, expected):
+    """ Checks that the velocity in the simulation is within 0.5 m/s of an
+    expected velocity.
+    Args:
+      expected: Expected velocity. (X, Y) """
+    velocity = self._filter.velocity()
+    if abs(position[self._X] - expected[self._X]) > 0.5:
+      return False
+    if abs(position[self._Y] - expected[self._Y]) > 0.5:
+      return False
+
+    return True
+
+  def check_transmitter_position(self, expected):
+    """ Checks that a perceived transmitter position in the simulation is
+    within 3 meters of an expected position. No individual transmitter is
+    specified, it will check to see if ANY transmitter is near the expected
+    position.
+    Args:
+      expected: The expected position. """
+    positions = self._filter.transmitter_positions()
+    for position in positions:
+      x_in_range = abs(position[self._X] - expected[self._X]) <= 3
+      y_in_range = abs(position[self._Y] - expected[self._Y]) <= 3
+      if (x_in_range and y_in_range):
+        return True
+
+    return False
 
 class BeliefManagerTests(tests.BaseTest):
   """ Tests for the BeliefManager class. """
@@ -739,6 +782,10 @@ class BeliefManagerTests(tests.BaseTest):
       simulacrum.iterate()
       simulacrum.print_report()
 
+    # Check that we ended up in a reasonable place.
+    self.assertTrue(simulacrum.check_position(waypoints[0]))
+    self.assertTrue(simulacrum.check_transmitter_position(transmitters[0]))
+
   def test_complex_long_term(self):
     """ Another, more complicated long-term iteration test. """
     np.random.seed(971)
@@ -755,3 +802,8 @@ class BeliefManagerTests(tests.BaseTest):
     for i in range(0, 73):
       simulacrum.iterate()
       simulacrum.print_report()
+
+    # Check that we ended up in a reasonable place.
+    self.assertTrue(simulacrum.check_position(waypoints[0]))
+    self.assertTrue(simulacrum.check_transmitter_position(transmitters[0]))
+    self.assertTrue(simulacrum.check_transmitter_position(transmitters[1]))
