@@ -137,21 +137,6 @@ class BeliefManager(Process):
 
     return normalized
 
-  def _fetch_radio_data(self):
-    """ Fetches measurements from the radio.
-    Returns:
-        A list containing one tuple for every object sighted by the radar.
-        Each tuple contains the LOB measurement and signal strength. """
-    transmitters = []
-
-    while True:
-      signal = self.__radio.read_next(block=False)
-      if not signal:
-        # No more data.
-        break
-
-    return transmitters
-
   def _associate_lob_readings(self, readings):
     """ Takes a set of LOB readings from the radio system, and associates them
     with known transmitters.
