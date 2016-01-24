@@ -57,7 +57,7 @@ class Kalman:
   # How good our model is of the drone position.
   POSITION_MODEL_UNCERTAINTY = 0.001
   # How good our model is of the drone velocity.
-  VELOCITY_MODEL_UNCERTAINTY = 0.05
+  VELOCITY_MODEL_UNCERTAINTY = 0.0
   # How good our model is of the LOBs.
   LOB_MODEL_UNCERTAINTY = 0.1
   # Factor by which we scale measured changes to transmitter positions before
@@ -189,6 +189,14 @@ class Kalman:
       Any of the arguments being None means we're missing a measurement. """
     observations = [position[self._X], position[self._Y], velocity[self._X],
                     velocity[self._Y]]
+
+    # We'll simply use the velocity measurements directly in our state, as drone
+    # positional accuracy isn't a huge priority, and they're already pretty
+    # decent.
+    if velocity[self._X] != None:
+      self.__state[self.VEL_X] = velocity[self._X]
+    if velocity[self._Y] != None:
+      self.__state[self.VEL_Y] = velocity[self._Y]
 
     expecting_lobs = self.__observations.shape[0] - len(observations)
     if len(args) != expecting_lobs:
