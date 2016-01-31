@@ -385,9 +385,9 @@ class _EnvironmentSimulator(BeliefManager):
     Returns:
       True if the check passes, False otherwise. """
     position = self._filter.position()
-    if abs(position[self._X] - expected[self._X]) > 0.5:
+    if abs(position[self._X] - expected[self._X]) > 1:
       return False
-    if abs(position[self._Y] - expected[self._Y]) > 0.5:
+    if abs(position[self._Y] - expected[self._Y]) > 1:
       return False
 
     return True
@@ -398,9 +398,9 @@ class _EnvironmentSimulator(BeliefManager):
     Args:
       expected: Expected velocity. (X, Y) """
     velocity = self._filter.velocity()
-    if abs(position[self._X] - expected[self._X]) > 0.5:
+    if abs(position[self._X] - expected[self._X]) > 1:
       return False
-    if abs(position[self._Y] - expected[self._Y]) > 0.5:
+    if abs(position[self._Y] - expected[self._Y]) > 1:
       return False
 
     return True
